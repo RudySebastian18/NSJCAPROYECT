@@ -10,7 +10,6 @@ st.set_page_config(
 )
 
 st.title("🖨️ Sistema de Ventas - Banners")
-st.caption("Uso interno - Empresa de gigantografías")
 
 # -------------------------
 # DATOS DEL NEGOCIO
