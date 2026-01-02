@@ -3,122 +3,94 @@ import pandas as pd
 from datetime import datetime
 
 # -------------------------
-# Configuración
+# CONFIGURACIÓN
 # -------------------------
 st.set_page_config(
-    page_title="Sistema de Ventas - Gigantografías",
+    page_title="Sistema de Ventas - Banners",
     layout="wide"
 )
 
-st.title("🖨️ Sistema de Ventas - Empresa de Gigantografías")
-st.caption("Uso interno - Registro de pedidos")
+st.title("🖨️ Sistema de Ventas - Banners")
+st.caption("Uso interno - Empresa de gigantografías")
 
 # -------------------------
-# Catálogo de productos
+# DATOS DEL NEGOCIO
 # -------------------------
-PRODUCTOS = {
-    "Gigantografía": 35.0,
-    "Banner Publicitario": 30.0,
-    "Vinil Adhesivo": 40.0
+ANCHOS_DISPONIBLES = [1.10, 1.60, 2.20, 3.20]
+
+TIPOS_BANNER = {
+    "8 onzas (Económico)": 1.0,
+    "12 onzas (Premium)": 1.0
 }
 
-MATERIALES = {
-    "Estándar": 1.0,
-    "Premium": 1.25
-}
-
-ACABADOS = {
-    "Sin acabado": 1.0,
-    "Ojales": 1.10,
-    "Laminado": 1.20
+PRECIO_DISENO = {
+    "Sí tiene diseño": 10,
+    "No tiene diseño": 13
 }
 
 # -------------------------
-# Inicializar ventas
+# FUNCIÓN PARA AJUSTAR ANCHO
 # -------------------------
-if "ventas" not in st.session_state:
-    st.session_state.ventas = []
-
-# -------------------------
-# Menú
-# -------------------------
-menu = st.sidebar.selectbox(
-    "Menú",
-    ["Nuevo Pedido", "Ventas Registradas", "Reporte"]
-)
+def ajustar_ancho(ancho_solicitado):
+    for ancho in ANCHOS_DISPONIBLES:
+        if ancho_solicitado <= ancho:
+            return ancho
+    return ANCHOS_DISPONIBLES[-1]  # máximo disponible
 
 # -------------------------
-# Nuevo Pedido
+# FORMULARIO
 # -------------------------
-if menu == "Nuevo Pedido":
-    st.subheader("📋 Nuevo Pedido")
+st.subheader("📋 Nuevo Pedido de Banner")
 
-    col1, col2 = st.columns(2)
+col1, col2 = st.columns(2)
 
-    with col1:
-        cliente = st.text_input("Cliente")
-        producto = st.selectbox("Producto", list(PRODUCTOS.keys()))
-        material = st.selectbox("Material", list(MATERIALES.keys()))
+with col1:
+    cliente = st.text_input("Cliente")
+    ancho_cliente = st.number_input(
+        "Ancho solicitado por el cliente (m)",
+        min_value=0.1,
+        step=0.1
+    )
+    alto = st.number_input(
+        "Alto solicitado (m)",
+        min_value=0.1,
+        step=0.1
+    )
 
-    with col2:
-        ancho = st.number_input("Ancho (m)", min_value=0.1, step=0.1)
-        alto = st.number_input("Alto (m)", min_value=0.1, step=0.1)
-        acabado = st.selectbox("Acabado", list(ACABADOS.keys()))
-
-    # -------------------------
-    # Cálculo
-    # -------------------------
-    area = ancho * alto
-    precio_base = PRODUCTOS[producto]
-    precio_final = area * precio_base * MATERIALES[material] * ACABADOS[acabado]
-
-    st.divider()
-    st.info(f"Área total: **{area:.2f} m²**")
-    st.success(f"💰 Precio final: **S/. {precio_final:.2f}**")
-
-    # -------------------------
-    # Guardar pedido
-    # -------------------------
-    if st.button("💾 Registrar Pedido"):
-        pedido = {
-            "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
-            "Cliente": cliente,
-            "Producto": producto,
-            "Material": material,
-            "Acabado": acabado,
-            "Ancho (m)": ancho,
-            "Alto (m)": alto,
-            "Área (m²)": round(area, 2),
-            "Total (S/.)": round(precio_final, 2)
-        }
-        st.session_state.ventas.append(pedido)
-        st.success("Pedido registrado correctamente")
+with col2:
+    tipo_banner = st.selectbox(
+        "Tipo de banner",
+        list(TIPOS_BANNER.keys())
+    )
+    diseno = st.selectbox(
+        "¿Cliente trae diseño?",
+        list(PRECIO_DISENO.keys())
+    )
 
 # -------------------------
-# Ventas Registradas
+# CÁLCULOS
 # -------------------------
-elif menu == "Ventas Registradas":
-    st.subheader("📊 Pedidos registrados")
-
-    if not st.session_state.ventas:
-        st.warning("No hay pedidos registrados")
-    else:
-        df = pd.DataFrame(st.session_state.ventas)
-        st.dataframe(df, use_container_width=True)
+ancho_trabajo = ajustar_ancho(ancho_cliente)
+area = ancho_trabajo * alto
+precio_m2 = PRECIO_DISENO[diseno]
+total = area * precio_m2
 
 # -------------------------
-# Reporte
+# RESULTADOS
 # -------------------------
-elif menu == "Reporte":
-    st.subheader("📈 Reporte de Ventas")
+st.divider()
 
-    if not st.session_state.ventas:
-        st.warning("No hay datos disponibles")
-    else:
-        df = pd.DataFrame(st.session_state.ventas)
+st.info(f"""
+🔹 **Ancho solicitado:** {ancho_cliente:.2f} m  
+🔹 **Ancho utilizado para producción:** {ancho_trabajo:.2f} m  
+🔹 **Área total:** {area:.2f} m²  
+🔹 **Precio por m²:** S/. {precio_m2}
+""")
 
-        col1, col2 = st.columns(2)
-        col1.metric("Total vendido", f"S/. {df['Total (S/.)'].sum():.2f}")
-        col2.metric("Pedidos", len(df))
+st.success(f"💰 **Precio final: S/. {total:.2f}**")
 
-        st.bar_chart(df.groupby("Producto")["Total (S/.)"].sum())
+# -------------------------
+# BOTÓN (POR AHORA SOLO VISUAL)
+# -------------------------
+if st.button("💾 Confirmar Pedido"):
+    st.success("Pedido confirmado (listo para guardar en base de datos)")
