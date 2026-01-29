@@ -215,7 +215,7 @@ with tab_extra:
         })
 
 # =====================================================
-# 📊 VENTAS DEL DÍA
+# 📊 VENTAS DEL DÍA (EDITAR / ELIMINAR)
 # =====================================================
 with tab_ventas:
     st.subheader("📊 Ventas del día")
@@ -225,7 +225,50 @@ with tab_ventas:
     else:
         df = pd.DataFrame(st.session_state.ventas)
         st.dataframe(df, use_container_width=True)
+
         st.metric("💰 Total del día", f"S/. {df['Total'].sum():.2f}")
+
+        st.divider()
+        st.subheader("✏️ Editar o eliminar venta")
+
+        indice = st.number_input(
+            "Número de venta a modificar (empieza en 0)",
+            min_value=0,
+            max_value=len(st.session_state.ventas)-1,
+            step=1
+        )
+
+        venta = st.session_state.ventas[indice]
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            nuevo_cliente = st.text_input("Cliente", venta["Cliente"])
+            nuevo_total = st.number_input("Total", value=float(venta["Total"]), step=1.0)
+
+        with col2:
+            nuevo_metodo = st.selectbox(
+                "Método de pago",
+                METODOS_PAGO,
+                index=METODOS_PAGO.index(venta["Método de pago"])
+            )
+
+        col_btn1, col_btn2 = st.columns(2)
+
+        with col_btn1:
+            if st.button("💾 Guardar cambios"):
+                st.session_state.ventas[indice]["Cliente"] = nuevo_cliente
+                st.session_state.ventas[indice]["Total"] = round(nuevo_total, 2)
+                st.session_state.ventas[indice]["Método de pago"] = nuevo_metodo
+                guardar_csv()
+                st.success("✅ Venta actualizada")
+
+        with col_btn2:
+            if st.button("🗑 Eliminar venta"):
+                st.session_state.ventas.pop(indice)
+                guardar_csv()
+                st.warning("🗑 Venta eliminada")
+
 
 # =====================================================
 # 📁 CIERRE / EXCEL
