@@ -56,7 +56,7 @@ METODOS_PAGO = [
 ]
 
 # -------------------------
-# INICIALIZAR VENTAS CON RECUPERACIÓN
+# INICIALIZAR VENTAS
 # -------------------------
 if "ventas" not in st.session_state:
     st.session_state.ventas = cargar_ventas()
@@ -74,7 +74,7 @@ tab_banner, tab_vinil, tab_extra, tab_ventas, tab_excel = st.tabs(
 def registrar_venta(venta):
     st.session_state.ventas.append(venta)
     guardar_ventas()
-    st.success("Venta registrada correctamente")
+    st.success("✅ Venta registrada correctamente")
 
 # =====================================================
 # 🟦 BANNER
@@ -94,17 +94,14 @@ with tab_banner:
         diseno = st.selectbox("¿Cliente trae diseño?", list(PRECIO_BANNER_M2.keys()), key="b_diseno")
         metodo_pago = st.selectbox("Método de pago", METODOS_PAGO, key="b_pago")
 
-    # ---- CÁLCULO AUTOMÁTICO ----
     area = round(ancho * alto, 2)
     precio_sugerido = round(area * PRECIO_BANNER_M2[diseno], 2)
 
     st.info(f"📐 Área: {area} m² | 💡 Precio sugerido: S/. {precio_sugerido}")
 
-    # ---- PRECIO EDITABLE ----
     if "b_precio_manual" not in st.session_state:
         st.session_state.b_precio_manual = precio_sugerido
 
-    # Si cambia el cálculo, actualiza automáticamente
     if st.session_state.b_precio_manual != precio_sugerido:
         st.session_state.b_precio_manual = precio_sugerido
 
@@ -126,9 +123,8 @@ with tab_banner:
             "Área (m²)": area,
             "Diseño": diseno,
             "Método de pago": metodo_pago,
-            "Total (S/.)": round(precio_final, 2)
+            "Total": round(precio_final, 2)
         })
-        
 
 # =====================================================
 # 🟩 VINIL
@@ -144,28 +140,17 @@ with tab_vinil:
         alto = st.number_input("Alto (m)", min_value=0.1, step=0.1, key="v_alto")
 
     with col2:
-        diseno = st.selectbox(
-            "¿Cliente trae diseño?",
-            list(PRECIO_VINIL_M2.keys()),
-            key="v_diseno"
-        )
+        diseno = st.selectbox("¿Cliente trae diseño?", list(PRECIO_VINIL_M2.keys()), key="v_diseno")
         metodo_pago = st.selectbox("Método de pago", METODOS_PAGO, key="v_pago")
 
-    # ------------------------
-    # CÁLCULO AUTOMÁTICO
-    # ------------------------
     area = round(ancho * alto, 2)
     precio_sugerido = round(area * PRECIO_VINIL_M2[diseno], 2)
 
     st.info(f"📐 Área: {area} m² | 💡 Precio sugerido: S/. {precio_sugerido}")
 
-    # ------------------------
-    # PRECIO EDITABLE
-    # ------------------------
     if "v_precio_manual" not in st.session_state:
         st.session_state.v_precio_manual = precio_sugerido
 
-    # Actualiza automático si cambia el cálculo
     if st.session_state.v_precio_manual != precio_sugerido:
         st.session_state.v_precio_manual = precio_sugerido
 
@@ -176,9 +161,6 @@ with tab_vinil:
         key="v_precio_manual"
     )
 
-    # ------------------------
-    # REGISTRAR VENTA
-    # ------------------------
     if st.button("➕ Agregar Vinil"):
         registrar_venta({
             "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
@@ -190,7 +172,6 @@ with tab_vinil:
             "Método de pago": metodo_pago,
             "Total": round(precio_final, 2)
         })
-        
 
 # =====================================================
 # ➕ VENTA EXTRA
@@ -199,7 +180,7 @@ with tab_extra:
     st.subheader("➕ Venta Extra")
 
     cliente = st.text_input("Cliente", key="e_cliente")
-    concepto = st.text_input("Concepto (ej: Instalación, Diseño, Mantenimiento)")
+    concepto = st.text_input("Concepto (Ej: Instalación, Diseño, Mantenimiento)")
     monto = st.number_input("Monto (S/.)", min_value=1.0, step=1.0)
     metodo_pago = st.selectbox("Método de pago", METODOS_PAGO, key="e_pago")
 
@@ -225,14 +206,13 @@ with tab_ventas:
     else:
         df = pd.DataFrame(st.session_state.ventas)
         st.dataframe(df, use_container_width=True)
-
         st.metric("💰 Total del día", f"S/. {df['Total'].sum():.2f}")
 
         st.divider()
         st.subheader("✏️ Editar o eliminar venta")
 
         indice = st.number_input(
-            "Número de venta a modificar (empieza en 0)",
+            "Número de venta (empieza en 0)",
             min_value=0,
             max_value=len(st.session_state.ventas)-1,
             step=1
@@ -243,7 +223,7 @@ with tab_ventas:
         col1, col2 = st.columns(2)
 
         with col1:
-            nuevo_cliente = st.text_input("Cliente", venta["Cliente"])
+            nuevo_cliente = st.text_input("Cliente", value=venta["Cliente"])
             nuevo_total = st.number_input("Total", value=float(venta["Total"]), step=1.0)
 
         with col2:
@@ -260,15 +240,15 @@ with tab_ventas:
                 st.session_state.ventas[indice]["Cliente"] = nuevo_cliente
                 st.session_state.ventas[indice]["Total"] = round(nuevo_total, 2)
                 st.session_state.ventas[indice]["Método de pago"] = nuevo_metodo
-                guardar_csv()
+                guardar_ventas()
                 st.success("✅ Venta actualizada")
 
         with col_btn2:
             if st.button("🗑 Eliminar venta"):
                 st.session_state.ventas.pop(indice)
-                guardar_csv()
+                guardar_ventas()
                 st.warning("🗑 Venta eliminada")
-
+                st.experimental_rerun()
 
 # =====================================================
 # 📁 CIERRE / EXCEL
@@ -291,4 +271,4 @@ with tab_excel:
             st.session_state.ventas.clear()
             if os.path.exists(ARCHIVO_VENTAS):
                 os.remove(ARCHIVO_VENTAS)
-            st.success("Día cerrado correctamente")
+            st.success("✅ Día cerrado correctamente")
