@@ -1,6 +1,21 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import os
+
+# -------------------------
+# ARCHIVO PERSISTENTE
+# -------------------------
+ARCHIVO_VENTAS = "ventas_hoy.csv"
+
+def cargar_ventas():
+    if os.path.exists(ARCHIVO_VENTAS):
+        return pd.read_csv(ARCHIVO_VENTAS).to_dict("records")
+    return []
+
+def guardar_ventas():
+    df = pd.DataFrame(st.session_state.ventas)
+    df.to_csv(ARCHIVO_VENTAS, index=False)
 
 # -------------------------
 # CONFIGURACIÓN
@@ -41,17 +56,25 @@ METODOS_PAGO = [
 ]
 
 # -------------------------
-# INICIALIZAR VENTAS
+# INICIALIZAR VENTAS CON RECUPERACIÓN
 # -------------------------
 if "ventas" not in st.session_state:
-    st.session_state.ventas = []
+    st.session_state.ventas = cargar_ventas()
 
 # -------------------------
 # PESTAÑAS
 # -------------------------
-tab_banner, tab_vinil, tab_ventas, tab_excel = st.tabs(
-    ["🟦 Banner", "🟩 Viniles", "📊 Ventas del día", "📁 Cierre / Excel"]
+tab_banner, tab_vinil, tab_extra, tab_ventas, tab_excel = st.tabs(
+    ["🟦 Banner", "🟩 Viniles", "➕ Venta Extra", "📊 Ventas del día", "📁 Cierre / Excel"]
 )
+
+# =====================================================
+# FUNCIÓN PARA REGISTRAR VENTA
+# =====================================================
+def registrar_venta(venta):
+    st.session_state.ventas.append(venta)
+    guardar_ventas()
+    st.success("Venta registrada correctamente")
 
 # =====================================================
 # 🟦 BANNER
@@ -75,32 +98,26 @@ with tab_banner:
     precio_calculado = area * PRECIO_BANNER_M2[diseno]
 
     precio_final = st.number_input(
-        "💰 Precio final a cobrar (editable)",
+        "💰 Precio final a cobrar",
         min_value=0.0,
         value=float(round(precio_calculado, 2)),
         step=1.0,
         key="b_precio_final"
     )
 
-    st.info(f"Área: {area:.2f} m² | Precio sugerido: S/. {precio_calculado:.2f}")
-
-    if st.button("➕ Agregar venta de Banner"):
-        st.session_state.ventas.append({
+    if st.button("➕ Agregar Banner"):
+        registrar_venta({
             "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
             "Cliente": cliente,
             "Producto": "Banner",
             "Tipo": tipo_banner,
-            "Ancho (m)": ancho,
-            "Alto (m)": alto,
-            "Área (m²)": round(area, 2),
-            "Diseño": diseno,
+            "Detalle": diseno,
             "Método de pago": metodo_pago,
-            "Total (S/.)": round(precio_final, 2)
+            "Total": round(precio_final, 2)
         })
-        st.success("Venta de banner registrada correctamente")
 
 # =====================================================
-# 🟩 VINILES
+# 🟩 VINIL
 # =====================================================
 with tab_vinil:
     st.subheader("📋 Venta de Vinil")
@@ -120,29 +137,45 @@ with tab_vinil:
     precio_calculado = area * PRECIO_VINIL_M2[diseno]
 
     precio_final = st.number_input(
-        "💰 Precio final a cobrar (editable)",
+        "💰 Precio final a cobrar",
         min_value=0.0,
         value=float(round(precio_calculado, 2)),
         step=1.0,
         key="v_precio_final"
     )
 
-    st.info(f"Área: {area:.2f} m² | Precio sugerido: S/. {precio_calculado:.2f}")
-
-    if st.button("➕ Agregar venta de Vinil"):
-        st.session_state.ventas.append({
+    if st.button("➕ Agregar Vinil"):
+        registrar_venta({
             "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
             "Cliente": cliente,
             "Producto": "Vinil",
             "Tipo": "-",
-            "Ancho (m)": ancho,
-            "Alto (m)": alto,
-            "Área (m²)": round(area, 2),
-            "Diseño": diseno,
+            "Detalle": diseno,
             "Método de pago": metodo_pago,
-            "Total (S/.)": round(precio_final, 2)
+            "Total": round(precio_final, 2)
         })
-        st.success("Venta de vinil registrada correctamente")
+
+# =====================================================
+# ➕ VENTA EXTRA
+# =====================================================
+with tab_extra:
+    st.subheader("➕ Venta Extra")
+
+    cliente = st.text_input("Cliente", key="e_cliente")
+    concepto = st.text_input("Concepto (ej: Instalación, Diseño, Mantenimiento)")
+    monto = st.number_input("Monto (S/.)", min_value=1.0, step=1.0)
+    metodo_pago = st.selectbox("Método de pago", METODOS_PAGO, key="e_pago")
+
+    if st.button("➕ Agregar Venta Extra"):
+        registrar_venta({
+            "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
+            "Cliente": cliente,
+            "Producto": "Extra",
+            "Tipo": concepto,
+            "Detalle": "-",
+            "Método de pago": metodo_pago,
+            "Total": round(monto, 2)
+        })
 
 # =====================================================
 # 📊 VENTAS DEL DÍA
@@ -155,7 +188,7 @@ with tab_ventas:
     else:
         df = pd.DataFrame(st.session_state.ventas)
         st.dataframe(df, use_container_width=True)
-        st.metric("💰 Total del día", f"S/. {df['Total (S/.)'].sum():.2f}")
+        st.metric("💰 Total del día", f"S/. {df['Total'].sum():.2f}")
 
 # =====================================================
 # 📁 CIERRE / EXCEL
@@ -172,12 +205,10 @@ with tab_excel:
         df.to_excel(nombre_archivo, index=False)
 
         with open(nombre_archivo, "rb") as file:
-            st.download_button(
-                "⬇️ Descargar Excel del día",
-                file,
-                nombre_archivo
-            )
+            st.download_button("⬇️ Descargar Excel", file, nombre_archivo)
 
         if st.button("🧹 Cerrar día"):
             st.session_state.ventas.clear()
+            if os.path.exists(ARCHIVO_VENTAS):
+                os.remove(ARCHIVO_VENTAS)
             st.success("Día cerrado correctamente")
