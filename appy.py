@@ -196,7 +196,7 @@ with tab_extra:
         })
 
 # =====================================================
-# 📊 VENTAS DEL DÍA (EDITAR / ELIMINAR)
+# 📊 VENTAS DEL DÍA (VISTA POR TARJETAS)
 # =====================================================
 with tab_ventas:
     st.subheader("📊 Ventas del día")
@@ -204,51 +204,85 @@ with tab_ventas:
     if not st.session_state.ventas:
         st.warning("No hay ventas registradas")
     else:
-        df = pd.DataFrame(st.session_state.ventas)
-        st.dataframe(df, use_container_width=True)
-        st.metric("💰 Total del día", f"S/. {df['Total'].sum():.2f}")
-
+        total_dia = sum(v["Total"] for v in st.session_state.ventas)
+        st.metric("💰 Total del día", f"S/. {total_dia:.2f}")
         st.divider()
-        st.subheader("✏️ Editar o eliminar venta")
 
-        indice = st.number_input(
-            "Número de venta (empieza en 0)",
-            min_value=0,
-            max_value=len(st.session_state.ventas)-1,
-            step=1
-        )
+        for i, venta in enumerate(st.session_state.ventas):
 
-        venta = st.session_state.ventas[indice]
+            with st.container(border=True):
+                st.markdown(f"### 🧾 Venta #{i+1}")
+                st.write(f"🕒 **Fecha:** {venta.get('Fecha','')}")
+                st.write(f"👤 **Cliente:** {venta.get('Cliente','')}")
+                st.write(f"📦 **Producto:** {venta.get('Producto','')}")
+                st.write(f"💳 **Pago:** {venta.get('Método de pago','')}")
+                st.write(f"💰 **Total:** S/. {venta.get('Total',0)}")
 
-        col1, col2 = st.columns(2)
+                # -------- DETALLES DINÁMICOS --------
+                if venta["Producto"] == "Banner":
+                    st.write(
+                        f"📐 Medidas: {venta.get('Ancho (m)')} x {venta.get('Alto (m)')} m | "
+                        f"Área: {venta.get('Área (m²)')} m²"
+                    )
+                    st.write(f"🧵 Tipo: {venta.get('Tipo')} | 🎨 Diseño: {venta.get('Diseño')}")
 
-        with col1:
-            nuevo_cliente = st.text_input("Cliente", value=venta["Cliente"])
-            nuevo_total = st.number_input("Total", value=float(venta["Total"]), step=1.0)
+                elif venta["Producto"] == "Vinil":
+                    st.write(
+                        f"📐 Medidas: {venta.get('Área (m²)')} m² | "
+                        f"🎨 Diseño: {venta.get('Detalle')}"
+                    )
 
-        with col2:
+                elif venta["Producto"] == "Extra":
+                    st.write(f"📝 Concepto: {venta.get('Tipo')}")
+
+                # -------- BOTONES --------
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    if st.button("✏️ Editar", key=f"edit_{i}"):
+                        st.session_state.edit_index = i
+
+                with col2:
+                    if st.button("🗑 Eliminar", key=f"del_{i}"):
+                        st.session_state.ventas.pop(i)
+                        guardar_ventas()
+                        st.experimental_rerun()
+
+        # ===============================
+        # PANEL DE EDICIÓN
+        # ===============================
+        if "edit_index" in st.session_state:
+            idx = st.session_state.edit_index
+            venta = st.session_state.ventas[idx]
+
+            st.divider()
+            st.subheader(f"✏️ Editando venta #{idx+1}")
+
+            nuevo_cliente = st.text_input("Cliente", value=venta["Cliente"], key="edit_cliente")
+            nuevo_total = st.number_input("Total", value=float(venta["Total"]), step=1.0, key="edit_total")
             nuevo_metodo = st.selectbox(
                 "Método de pago",
                 METODOS_PAGO,
-                index=METODOS_PAGO.index(venta["Método de pago"])
+                index=METODOS_PAGO.index(venta["Método de pago"]),
+                key="edit_pago"
             )
 
-        col_btn1, col_btn2 = st.columns(2)
+            col1, col2 = st.columns(2)
 
-        with col_btn1:
-            if st.button("💾 Guardar cambios"):
-                st.session_state.ventas[indice]["Cliente"] = nuevo_cliente
-                st.session_state.ventas[indice]["Total"] = round(nuevo_total, 2)
-                st.session_state.ventas[indice]["Método de pago"] = nuevo_metodo
-                guardar_ventas()
-                st.success("✅ Venta actualizada")
+            with col1:
+                if st.button("💾 Guardar cambios", key="guardar_edicion"):
+                    venta["Cliente"] = nuevo_cliente
+                    venta["Total"] = round(nuevo_total, 2)
+                    venta["Método de pago"] = nuevo_metodo
+                    guardar_ventas()
+                    del st.session_state.edit_index
+                    st.success("✅ Venta actualizada")
+                    st.experimental_rerun()
 
-        with col_btn2:
-            if st.button("🗑 Eliminar venta"):
-                st.session_state.ventas.pop(indice)
-                guardar_ventas()
-                st.warning("🗑 Venta eliminada")
-                st.experimental_rerun()
+            with col2:
+                if st.button("❌ Cancelar edición", key="cancelar_edicion"):
+                    del st.session_state.edit_index
+                    st.experimental_rerun()
 
 # =====================================================
 # 📁 CIERRE / EXCEL
