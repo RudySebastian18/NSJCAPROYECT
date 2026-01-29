@@ -190,7 +190,7 @@ with tab_vinil:
             "Método de pago": metodo_pago,
             "Total": round(precio_final, 2)
         })
-        st.success("✅ Venta de vinil registrada correctamente")
+        
 
 # =====================================================
 # ➕ VENTA EXTRA
