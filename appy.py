@@ -99,15 +99,14 @@ with tab_banner:
 
     st.info(f"📐 Área: {area} m² | 💡 Precio sugerido: S/. {precio_sugerido}")
 
+    # Precio editable correctamente
     if "b_precio_manual" not in st.session_state:
-        st.session_state.b_precio_manual = precio_sugerido
-
-    if st.session_state.b_precio_manual != precio_sugerido:
         st.session_state.b_precio_manual = precio_sugerido
 
     precio_final = st.number_input(
         "💰 Precio final a cobrar (editable)",
         min_value=0.0,
+        value=float(st.session_state.b_precio_manual),
         step=1.0,
         key="b_precio_manual"
     )
@@ -151,12 +150,10 @@ with tab_vinil:
     if "v_precio_manual" not in st.session_state:
         st.session_state.v_precio_manual = precio_sugerido
 
-    if st.session_state.v_precio_manual != precio_sugerido:
-        st.session_state.v_precio_manual = precio_sugerido
-
     precio_final = st.number_input(
         "💰 Precio final a cobrar (editable)",
         min_value=0.0,
+        value=float(st.session_state.v_precio_manual),
         step=1.0,
         key="v_precio_manual"
     )
@@ -180,7 +177,7 @@ with tab_extra:
     st.subheader("➕ Venta Extra")
 
     cliente = st.text_input("Cliente", key="e_cliente")
-    concepto = st.text_input("Concepto (Ej: Instalación, Diseño, Mantenimiento)")
+    concepto = st.text_input("Concepto")
     monto = st.number_input("Monto (S/.)", min_value=1.0, step=1.0)
     metodo_pago = st.selectbox("Método de pago", METODOS_PAGO, key="e_pago")
 
@@ -196,7 +193,7 @@ with tab_extra:
         })
 
 # =====================================================
-# 📊 VENTAS DEL DÍA (VISTA POR TARJETAS)
+# 📊 VENTAS DEL DÍA
 # =====================================================
 with tab_ventas:
     st.subheader("📊 Ventas del día")
@@ -209,48 +206,27 @@ with tab_ventas:
         st.divider()
 
         for i, venta in enumerate(st.session_state.ventas):
-
             with st.container(border=True):
                 st.markdown(f"### 🧾 Venta #{i+1}")
-                st.write(f"🕒 **Fecha:** {venta.get('Fecha','')}")
-                st.write(f"👤 **Cliente:** {venta.get('Cliente','')}")
-                st.write(f"📦 **Producto:** {venta.get('Producto','')}")
-                st.write(f"💳 **Pago:** {venta.get('Método de pago','')}")
-                st.write(f"💰 **Total:** S/. {venta.get('Total',0)}")
+                st.write(f"👤 Cliente: {venta.get('Cliente')}")
+                st.write(f"📦 Producto: {venta.get('Producto')}")
+                st.write(f"💳 Pago: {venta.get('Método de pago')}")
+                st.write(f"💰 Total: S/. {venta.get('Total')}")
 
-                # -------- DETALLES DINÁMICOS --------
-                if venta["Producto"] == "Banner":
-                    st.write(
-                        f"📐 Medidas: {venta.get('Ancho (m)')} x {venta.get('Alto (m)')} m | "
-                        f"Área: {venta.get('Área (m²)')} m²"
-                    )
-                    st.write(f"🧵 Tipo: {venta.get('Tipo')} | 🎨 Diseño: {venta.get('Diseño')}")
-
-                elif venta["Producto"] == "Vinil":
-                    st.write(
-                        f"📐 Medidas: {venta.get('Área (m²)')} m² | "
-                        f"🎨 Diseño: {venta.get('Detalle')}"
-                    )
-
-                elif venta["Producto"] == "Extra":
-                    st.write(f"📝 Concepto: {venta.get('Tipo')}")
-
-                # -------- BOTONES --------
                 col1, col2 = st.columns(2)
 
                 with col1:
                     if st.button("✏️ Editar", key=f"edit_{i}"):
                         st.session_state.edit_index = i
+                        st.rerun()
 
                 with col2:
                     if st.button("🗑 Eliminar", key=f"del_{i}"):
                         st.session_state.ventas.pop(i)
                         guardar_ventas()
-                        st.experimental_rerun()
+                        st.rerun()
 
-        # ===============================
         # PANEL DE EDICIÓN
-        # ===============================
         if "edit_index" in st.session_state:
             idx = st.session_state.edit_index
             venta = st.session_state.ventas[idx]
@@ -258,31 +234,29 @@ with tab_ventas:
             st.divider()
             st.subheader(f"✏️ Editando venta #{idx+1}")
 
-            nuevo_cliente = st.text_input("Cliente", value=venta["Cliente"], key="edit_cliente")
-            nuevo_total = st.number_input("Total", value=float(venta["Total"]), step=1.0, key="edit_total")
+            nuevo_cliente = st.text_input("Cliente", value=venta["Cliente"])
+            nuevo_total = st.number_input("Total", value=float(venta["Total"]), step=1.0)
             nuevo_metodo = st.selectbox(
                 "Método de pago",
                 METODOS_PAGO,
-                index=METODOS_PAGO.index(venta["Método de pago"]),
-                key="edit_pago"
+                index=METODOS_PAGO.index(venta["Método de pago"])
             )
 
             col1, col2 = st.columns(2)
 
             with col1:
-                if st.button("💾 Guardar cambios", key="guardar_edicion"):
+                if st.button("💾 Guardar cambios"):
                     venta["Cliente"] = nuevo_cliente
                     venta["Total"] = round(nuevo_total, 2)
                     venta["Método de pago"] = nuevo_metodo
                     guardar_ventas()
                     del st.session_state.edit_index
-                    st.success("✅ Venta actualizada")
-                    st.experimental_rerun()
+                    st.rerun()
 
             with col2:
-                if st.button("❌ Cancelar edición", key="cancelar_edicion"):
+                if st.button("❌ Cancelar"):
                     del st.session_state.edit_index
-                    st.experimental_rerun()
+                    st.rerun()
 
 # =====================================================
 # 📁 CIERRE / EXCEL
@@ -306,3 +280,4 @@ with tab_excel:
             if os.path.exists(ARCHIVO_VENTAS):
                 os.remove(ARCHIVO_VENTAS)
             st.success("✅ Día cerrado correctamente")
+            st.rerun()
