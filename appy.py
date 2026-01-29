@@ -91,30 +91,44 @@ with tab_banner:
         tipo_banner = st.selectbox("Tipo de banner", TIPOS_BANNER, key="b_tipo")
 
     with col2:
-        diseno = st.selectbox("¿Cliente trae diseño?", PRECIO_BANNER_M2.keys(), key="b_diseno")
+        diseno = st.selectbox("¿Cliente trae diseño?", list(PRECIO_BANNER_M2.keys()), key="b_diseno")
         metodo_pago = st.selectbox("Método de pago", METODOS_PAGO, key="b_pago")
 
-    area = ancho * alto
-    precio_calculado = area * PRECIO_BANNER_M2[diseno]
+    # ---- CÁLCULO AUTOMÁTICO ----
+    area = round(ancho * alto, 2)
+    precio_sugerido = round(area * PRECIO_BANNER_M2[diseno], 2)
+
+    st.info(f"📐 Área: {area} m² | 💡 Precio sugerido: S/. {precio_sugerido}")
+
+    # ---- PRECIO EDITABLE ----
+    if "b_precio_manual" not in st.session_state:
+        st.session_state.b_precio_manual = precio_sugerido
+
+    # Si cambia el cálculo, actualiza automáticamente
+    if st.session_state.b_precio_manual != precio_sugerido:
+        st.session_state.b_precio_manual = precio_sugerido
 
     precio_final = st.number_input(
-        "💰 Precio final a cobrar",
+        "💰 Precio final a cobrar (editable)",
         min_value=0.0,
-        value=float(round(precio_calculado, 2)),
         step=1.0,
-        key="b_precio_final"
+        key="b_precio_manual"
     )
 
-    if st.button("➕ Agregar Banner"):
+    if st.button("➕ Agregar venta de Banner"):
         registrar_venta({
             "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
             "Cliente": cliente,
             "Producto": "Banner",
             "Tipo": tipo_banner,
-            "Detalle": diseno,
+            "Ancho (m)": ancho,
+            "Alto (m)": alto,
+            "Área (m²)": area,
+            "Diseño": diseno,
             "Método de pago": metodo_pago,
-            "Total": round(precio_final, 2)
+            "Total (S/.)": round(precio_final, 2)
         })
+        st.success("✅ Venta de banner registrada correctamente")
 
 # =====================================================
 # 🟩 VINIL
@@ -130,20 +144,41 @@ with tab_vinil:
         alto = st.number_input("Alto (m)", min_value=0.1, step=0.1, key="v_alto")
 
     with col2:
-        diseno = st.selectbox("¿Cliente trae diseño?", PRECIO_VINIL_M2.keys(), key="v_diseno")
+        diseno = st.selectbox(
+            "¿Cliente trae diseño?",
+            list(PRECIO_VINIL_M2.keys()),
+            key="v_diseno"
+        )
         metodo_pago = st.selectbox("Método de pago", METODOS_PAGO, key="v_pago")
 
-    area = ancho * alto
-    precio_calculado = area * PRECIO_VINIL_M2[diseno]
+    # ------------------------
+    # CÁLCULO AUTOMÁTICO
+    # ------------------------
+    area = round(ancho * alto, 2)
+    precio_sugerido = round(area * PRECIO_VINIL_M2[diseno], 2)
+
+    st.info(f"📐 Área: {area} m² | 💡 Precio sugerido: S/. {precio_sugerido}")
+
+    # ------------------------
+    # PRECIO EDITABLE
+    # ------------------------
+    if "v_precio_manual" not in st.session_state:
+        st.session_state.v_precio_manual = precio_sugerido
+
+    # Actualiza automático si cambia el cálculo
+    if st.session_state.v_precio_manual != precio_sugerido:
+        st.session_state.v_precio_manual = precio_sugerido
 
     precio_final = st.number_input(
-        "💰 Precio final a cobrar",
+        "💰 Precio final a cobrar (editable)",
         min_value=0.0,
-        value=float(round(precio_calculado, 2)),
         step=1.0,
-        key="v_precio_final"
+        key="v_precio_manual"
     )
 
+    # ------------------------
+    # REGISTRAR VENTA
+    # ------------------------
     if st.button("➕ Agregar Vinil"):
         registrar_venta({
             "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
@@ -151,9 +186,11 @@ with tab_vinil:
             "Producto": "Vinil",
             "Tipo": "-",
             "Detalle": diseno,
+            "Área (m²)": area,
             "Método de pago": metodo_pago,
             "Total": round(precio_final, 2)
         })
+        st.success("✅ Venta de vinil registrada correctamente")
 
 # =====================================================
 # ➕ VENTA EXTRA
