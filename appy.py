@@ -128,7 +128,7 @@ with tab_banner:
             "Método de pago": metodo_pago,
             "Total (S/.)": round(precio_final, 2)
         })
-        st.success("✅ Venta de banner registrada correctamente")
+        
 
 # =====================================================
 # 🟩 VINIL
