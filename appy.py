@@ -26,27 +26,12 @@ st.set_page_config(
 )
 
 st.title("🖨️ Sistema de Ventas - NSJ CAPROYECT")
-st.caption("Uso interno")
+st.caption("Registro interno de ventas")
 
 # -------------------------
 # DATOS DEL NEGOCIO
 # -------------------------
-ANCHOS = [1.10, 1.60, 2.20, 3.20]
-
-TIPOS_BANNER = [
-    "8 onzas (Económico)",
-    "12 onzas (Premium)"
-]
-
-PRECIO_BANNER_M2 = {
-    "Sí tiene diseño": 10,
-    "No tiene diseño": 13
-}
-
-PRECIO_VINIL_M2 = {
-    "Sí tiene diseño": 12,
-    "No tiene diseño": 15
-}
+PRODUCTOS = ["Banner", "Vinil", "Extra"]
 
 METODOS_PAGO = [
     "Efectivo",
@@ -61,13 +46,6 @@ METODOS_PAGO = [
 if "ventas" not in st.session_state:
     st.session_state.ventas = cargar_ventas()
 
-# -------------------------
-# PESTAÑAS
-# -------------------------
-tab_banner, tab_vinil, tab_extra, tab_ventas, tab_excel = st.tabs(
-    ["🟦 Banner", "🟩 Viniles", "➕ Venta Extra", "📊 Ventas del día", "📁 Cierre / Excel"]
-)
-
 # =====================================================
 # FUNCIÓN PARA REGISTRAR VENTA
 # =====================================================
@@ -77,207 +55,135 @@ def registrar_venta(venta):
     st.success("✅ Venta registrada correctamente")
 
 # =====================================================
-# 🟦 BANNER
+# 📌 NUEVA VENTA
 # =====================================================
-with tab_banner:
-    st.subheader("📋 Venta de Banner")
+st.subheader("➕ Registrar nueva venta")
 
-    col1, col2 = st.columns(2)
+col1, col2 = st.columns(2)
 
-    with col1:
-        cliente = st.text_input("Cliente", key="b_cliente")
-        ancho = st.selectbox("Ancho (m)", ANCHOS, key="b_ancho")
-        alto = st.number_input("Alto (m)", min_value=0.1, step=0.1, key="b_alto")
-        tipo_banner = st.selectbox("Tipo de banner", TIPOS_BANNER, key="b_tipo")
+with col1:
+    cliente = st.text_input("Cliente")
+    producto = st.selectbox("Producto", PRODUCTOS)
+    detalle = st.text_input("Detalle / Concepto")
 
-    with col2:
-        diseno = st.selectbox("¿Cliente trae diseño?", list(PRECIO_BANNER_M2.keys()), key="b_diseno")
-        metodo_pago = st.selectbox("Método de pago", METODOS_PAGO, key="b_pago")
+with col2:
+    metodo_pago = st.selectbox("Método de pago", METODOS_PAGO)
+    total = st.number_input("Total (S/.)", min_value=0.0, step=1.0)
 
-    area = round(ancho * alto, 2)
-    precio_sugerido = round(area * PRECIO_BANNER_M2[diseno], 2)
+if st.button("➕ Agregar Venta"):
+    registrar_venta({
+        "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        "Cliente": cliente,
+        "Producto": producto,
+        "Detalle": detalle,
+        "Método de pago": metodo_pago,
+        "Total": round(total, 2)
+    })
 
-    st.info(f"📐 Área: {area} m² | 💡 Precio sugerido: S/. {precio_sugerido}")
-
-    # Precio editable correctamente
-    if "b_precio_manual" not in st.session_state:
-        st.session_state.b_precio_manual = precio_sugerido
-
-    precio_final = st.number_input(
-        "💰 Precio final a cobrar (editable)",
-        min_value=0.0,
-        value=float(st.session_state.b_precio_manual),
-        step=1.0,
-        key="b_precio_manual"
-    )
-
-    if st.button("➕ Agregar venta de Banner"):
-        registrar_venta({
-            "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
-            "Cliente": cliente,
-            "Producto": "Banner",
-            "Tipo": tipo_banner,
-            "Ancho (m)": ancho,
-            "Alto (m)": alto,
-            "Área (m²)": area,
-            "Diseño": diseno,
-            "Método de pago": metodo_pago,
-            "Total": round(precio_final, 2)
-        })
-
-# =====================================================
-# 🟩 VINIL
-# =====================================================
-with tab_vinil:
-    st.subheader("📋 Venta de Vinil")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        cliente = st.text_input("Cliente", key="v_cliente")
-        ancho = st.selectbox("Ancho (m)", ANCHOS, key="v_ancho")
-        alto = st.number_input("Alto (m)", min_value=0.1, step=0.1, key="v_alto")
-
-    with col2:
-        diseno = st.selectbox("¿Cliente trae diseño?", list(PRECIO_VINIL_M2.keys()), key="v_diseno")
-        metodo_pago = st.selectbox("Método de pago", METODOS_PAGO, key="v_pago")
-
-    area = round(ancho * alto, 2)
-    precio_sugerido = round(area * PRECIO_VINIL_M2[diseno], 2)
-
-    st.info(f"📐 Área: {area} m² | 💡 Precio sugerido: S/. {precio_sugerido}")
-
-    if "v_precio_manual" not in st.session_state:
-        st.session_state.v_precio_manual = precio_sugerido
-
-    precio_final = st.number_input(
-        "💰 Precio final a cobrar (editable)",
-        min_value=0.0,
-        value=float(st.session_state.v_precio_manual),
-        step=1.0,
-        key="v_precio_manual"
-    )
-
-    if st.button("➕ Agregar Vinil"):
-        registrar_venta({
-            "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
-            "Cliente": cliente,
-            "Producto": "Vinil",
-            "Tipo": "-",
-            "Detalle": diseno,
-            "Área (m²)": area,
-            "Método de pago": metodo_pago,
-            "Total": round(precio_final, 2)
-        })
-
-# =====================================================
-# ➕ VENTA EXTRA
-# =====================================================
-with tab_extra:
-    st.subheader("➕ Venta Extra")
-
-    cliente = st.text_input("Cliente", key="e_cliente")
-    concepto = st.text_input("Concepto")
-    monto = st.number_input("Monto (S/.)", min_value=1.0, step=1.0)
-    metodo_pago = st.selectbox("Método de pago", METODOS_PAGO, key="e_pago")
-
-    if st.button("➕ Agregar Venta Extra"):
-        registrar_venta({
-            "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
-            "Cliente": cliente,
-            "Producto": "Extra",
-            "Tipo": concepto,
-            "Detalle": "-",
-            "Método de pago": metodo_pago,
-            "Total": round(monto, 2)
-        })
+st.divider()
 
 # =====================================================
 # 📊 VENTAS DEL DÍA
 # =====================================================
-with tab_ventas:
-    st.subheader("📊 Ventas del día")
+st.subheader("📊 Ventas del día")
 
-    if not st.session_state.ventas:
-        st.warning("No hay ventas registradas")
-    else:
-        total_dia = sum(v["Total"] for v in st.session_state.ventas)
-        st.metric("💰 Total del día", f"S/. {total_dia:.2f}")
-        st.divider()
+if not st.session_state.ventas:
+    st.warning("No hay ventas registradas")
+else:
+    total_dia = sum(v["Total"] for v in st.session_state.ventas)
+    st.metric("💰 Total del día", f"S/. {total_dia:.2f}")
+    st.divider()
 
-        for i, venta in enumerate(st.session_state.ventas):
-            with st.container(border=True):
-                st.markdown(f"### 🧾 Venta #{i+1}")
-                st.write(f"👤 Cliente: {venta.get('Cliente')}")
-                st.write(f"📦 Producto: {venta.get('Producto')}")
-                st.write(f"💳 Pago: {venta.get('Método de pago')}")
-                st.write(f"💰 Total: S/. {venta.get('Total')}")
-
-                col1, col2 = st.columns(2)
-
-                with col1:
-                    if st.button("✏️ Editar", key=f"edit_{i}"):
-                        st.session_state.edit_index = i
-                        st.rerun()
-
-                with col2:
-                    if st.button("🗑 Eliminar", key=f"del_{i}"):
-                        st.session_state.ventas.pop(i)
-                        guardar_ventas()
-                        st.rerun()
-
-        # PANEL DE EDICIÓN
-        if "edit_index" in st.session_state:
-            idx = st.session_state.edit_index
-            venta = st.session_state.ventas[idx]
-
-            st.divider()
-            st.subheader(f"✏️ Editando venta #{idx+1}")
-
-            nuevo_cliente = st.text_input("Cliente", value=venta["Cliente"])
-            nuevo_total = st.number_input("Total", value=float(venta["Total"]), step=1.0)
-            nuevo_metodo = st.selectbox(
-                "Método de pago",
-                METODOS_PAGO,
-                index=METODOS_PAGO.index(venta["Método de pago"])
-            )
+    for i, venta in enumerate(st.session_state.ventas):
+        with st.container(border=True):
+            st.markdown(f"### 🧾 Venta #{i+1}")
+            st.write(f"🕒 {venta.get('Fecha')}")
+            st.write(f"👤 Cliente: {venta.get('Cliente')}")
+            st.write(f"📦 Producto: {venta.get('Producto')}")
+            st.write(f"📝 Detalle: {venta.get('Detalle')}")
+            st.write(f"💳 Pago: {venta.get('Método de pago')}")
+            st.write(f"💰 Total: S/. {venta.get('Total')}")
 
             col1, col2 = st.columns(2)
 
             with col1:
-                if st.button("💾 Guardar cambios"):
-                    venta["Cliente"] = nuevo_cliente
-                    venta["Total"] = round(nuevo_total, 2)
-                    venta["Método de pago"] = nuevo_metodo
-                    guardar_ventas()
-                    del st.session_state.edit_index
+                if st.button("✏️ Editar", key=f"edit_{i}"):
+                    st.session_state.edit_index = i
                     st.rerun()
 
             with col2:
-                if st.button("❌ Cancelar"):
-                    del st.session_state.edit_index
+                if st.button("🗑 Eliminar", key=f"del_{i}"):
+                    st.session_state.ventas.pop(i)
+                    guardar_ventas()
                     st.rerun()
 
+    # ===============================
+    # PANEL DE EDICIÓN
+    # ===============================
+    if "edit_index" in st.session_state:
+        idx = st.session_state.edit_index
+        venta = st.session_state.ventas[idx]
+
+        st.divider()
+        st.subheader(f"✏️ Editando venta #{idx+1}")
+
+        nuevo_cliente = st.text_input("Cliente", value=venta["Cliente"])
+        nuevo_producto = st.selectbox(
+            "Producto",
+            PRODUCTOS,
+            index=PRODUCTOS.index(venta["Producto"])
+        )
+        nuevo_detalle = st.text_input("Detalle", value=venta["Detalle"])
+        nuevo_metodo = st.selectbox(
+            "Método de pago",
+            METODOS_PAGO,
+            index=METODOS_PAGO.index(venta["Método de pago"])
+        )
+        nuevo_total = st.number_input(
+            "Total",
+            value=float(venta["Total"]),
+            step=1.0
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("💾 Guardar cambios"):
+                venta["Cliente"] = nuevo_cliente
+                venta["Producto"] = nuevo_producto
+                venta["Detalle"] = nuevo_detalle
+                venta["Método de pago"] = nuevo_metodo
+                venta["Total"] = round(nuevo_total, 2)
+                guardar_ventas()
+                del st.session_state.edit_index
+                st.rerun()
+
+        with col2:
+            if st.button("❌ Cancelar"):
+                del st.session_state.edit_index
+                st.rerun()
+
+st.divider()
+
 # =====================================================
-# 📁 CIERRE / EXCEL
+# 📁 CIERRE / EXPORTAR EXCEL
 # =====================================================
-with tab_excel:
-    st.subheader("📁 Cierre del día")
+st.subheader("📁 Cierre del día")
 
-    if not st.session_state.ventas:
-        st.warning("No hay ventas para exportar")
-    else:
-        df = pd.DataFrame(st.session_state.ventas)
-        nombre_archivo = f"ventas_{datetime.now().strftime('%Y%m%d')}.xlsx"
+if not st.session_state.ventas:
+    st.warning("No hay ventas para exportar")
+else:
+    df = pd.DataFrame(st.session_state.ventas)
+    nombre_archivo = f"ventas_{datetime.now().strftime('%Y%m%d')}.xlsx"
 
-        df.to_excel(nombre_archivo, index=False)
+    df.to_excel(nombre_archivo, index=False)
 
-        with open(nombre_archivo, "rb") as file:
-            st.download_button("⬇️ Descargar Excel", file, nombre_archivo)
+    with open(nombre_archivo, "rb") as file:
+        st.download_button("⬇️ Descargar Excel", file, nombre_archivo)
 
-        if st.button("🧹 Cerrar día"):
-            st.session_state.ventas.clear()
-            if os.path.exists(ARCHIVO_VENTAS):
-                os.remove(ARCHIVO_VENTAS)
-            st.success("✅ Día cerrado correctamente")
-            st.rerun()
+    if st.button("🧹 Cerrar día"):
+        st.session_state.ventas.clear()
+        if os.path.exists(ARCHIVO_VENTAS):
+            os.remove(ARCHIVO_VENTAS)
+        st.success("✅ Día cerrado correctamente")
+        st.rerun()
