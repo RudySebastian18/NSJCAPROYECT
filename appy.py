@@ -1,242 +1,236 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from supabase import create_client
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+import os
+from PIL import Image
+
+# PDF
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
 from reportlab.lib import colors
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.platypus import Paragraph
+from reportlab.lib.styles import getSampleStyleSheet
 
-# ===================================
+# -------------------------
 # CONFIGURACIÓN
-# ===================================
-st.set_page_config(page_title="Sistema NSJ CAPROYECT", layout="wide")
+# -------------------------
+st.set_page_config(page_title="Sistema de Ventas - NSJ CAPROYECT", layout="wide")
 
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+ARCHIVO_VENTAS = "ventas_hoy.csv"
 
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+# -------------------------
+# FUNCIONES CSV
+# -------------------------
+def cargar_ventas():
+    if os.path.exists(ARCHIVO_VENTAS):
+        return pd.read_csv(ARCHIVO_VENTAS).to_dict("records")
+    return []
 
-# ===================================
-# LOGIN
-# ===================================
-if "user_role" not in st.session_state:
-    st.session_state.user_role = None
+def guardar_ventas():
+    df = pd.DataFrame(st.session_state.ventas)
+    df.to_csv(ARCHIVO_VENTAS, index=False)
 
-def login():
-    st.title("🔐 Inicio de Sesión")
+# -------------------------
+# INICIALIZAR
+# -------------------------
+if "ventas" not in st.session_state:
+    st.session_state.ventas = cargar_ventas()
 
-    user = st.text_input("Usuario")
-    password = st.text_input("Contraseña", type="password")
+# -------------------------
+# HEADER CON LOGO
+# -------------------------
+col_logo, col_title = st.columns([1, 4])
 
-    if st.button("Ingresar"):
+with col_logo:
+    if os.path.exists("logo.png"):
+        logo = Image.open("logo.png")
+        st.image(logo, width=120)
 
-        if user == st.secrets["GERENTE_USER"] and password == st.secrets["GERENTE_PASS"]:
-            st.session_state.user_role = "gerente"
-            st.rerun()
+with col_title:
+    st.title("Sistema de Ventas - NSJ CAPROYECT")
+    st.caption("Uso interno")
 
-        elif user == st.secrets["VENDEDOR_USER"] and password == st.secrets["VENDEDOR_PASS"]:
-            st.session_state.user_role = "vendedor"
-            st.rerun()
+st.divider()
 
-        else:
-            st.error("Credenciales incorrectas")
+# -------------------------
+# MÉTODOS DE PAGO
+# -------------------------
+METODOS_PAGO = ["Efectivo", "Yape", "Plin", "Transferencia"]
 
-if st.session_state.user_role is None:
-    login()
-    st.stop()
+# -------------------------
+# FUNCIÓN REGISTRAR
+# -------------------------
+def registrar_venta(venta):
+    st.session_state.ventas.append(venta)
+    guardar_ventas()
+    st.success("✅ Venta registrada correctamente")
 
-# ===================================
-# HEADER
-# ===================================
-col1, col2 = st.columns([6,1])
-with col1:
-    st.title("🖨️ Sistema de Ventas - NSJ CAPROYECT")
-with col2:
-    if st.button("Cerrar sesión"):
-        st.session_state.user_role = None
-        st.rerun()
+# -------------------------
+# PESTAÑAS
+# -------------------------
+tab_venta, tab_ventas, tab_cierre = st.tabs(
+    ["➕ Nueva Venta", "📊 Ventas del día", "📁 Cierre / Reporte"]
+)
 
-# ===================================
-# FUNCIONES
-# ===================================
-def registrar_venta(data):
-    supabase.table("ventas").insert(data).execute()
-    st.success("✅ Venta registrada")
-    st.rerun()
-
-def obtener_ventas():
-    response = supabase.table("ventas").select("*").order("fecha", desc=True).execute()
-    return response.data
-
-# ===================================
-# TABS
-# ===================================
-tabs = ["💰 Venta Completa", "🟡 Adelanto", "🧾 Completar Pago", "📁 PDF"]
-
-if st.session_state.user_role == "gerente":
-    tabs.append("📊 Panel Gerente")
-
-tab_objects = st.tabs(tabs)
-
-# ===================================
-# 💰 VENTA COMPLETA
-# ===================================
-with tab_objects[0]:
-
-    st.subheader("Registrar Venta Completa")
+# =====================================================
+# ➕ NUEVA VENTA
+# =====================================================
+with tab_venta:
+    st.subheader("Registrar nueva venta")
 
     cliente = st.text_input("Cliente")
-    producto = st.text_input("Producto")
-    detalle = st.text_input("Detalle")
-    metodo_pago = st.selectbox("Método de pago", ["Efectivo","Yape","Plin","Transferencia"])
-    total = st.number_input("Total", min_value=1.0, step=1.0)
+    producto = st.text_input("Producto / Descripción")
+    total = st.number_input("Total del producto (S/.)", min_value=0.0, step=1.0)
+    metodo_pago = st.selectbox("Método de pago", METODOS_PAGO)
 
-    if st.button("Registrar Venta Completa"):
+    tipo_pago = st.radio(
+        "Tipo de pago",
+        ["Pago completo", "Adelanto"]
+    )
 
-        if cliente and producto:
-            registrar_venta({
-                "cliente": cliente,
-                "producto": producto,
-                "detalle": detalle,
-                "metodo_pago": metodo_pago,
-                "total": total,
-                "tipo_pago": "Completo",
-                "monto_pagado": total,
-                "restante": 0
-            })
-        else:
-            st.error("Completa los campos")
+    if tipo_pago == "Pago completo":
+        pagado = total
+        saldo = 0
+        estado = "Pagado"
 
-# ===================================
-# 🟡 ADELANTO
-# ===================================
-with tab_objects[1]:
+        st.success("✔ Venta pagada completamente")
 
-    st.subheader("Registrar Adelanto")
-
-    cliente = st.text_input("Cliente (adelanto)")
-    producto = st.text_input("Producto (adelanto)")
-    detalle = st.text_input("Detalle (adelanto)")
-    metodo_pago = st.selectbox("Método de pago (adelanto)", ["Efectivo","Yape","Plin","Transferencia"])
-    total = st.number_input("Total del producto", min_value=1.0, step=1.0)
-    adelanto = st.number_input("Monto adelantado", min_value=1.0, step=1.0)
-
-    if st.button("Registrar Adelanto"):
-
-        if adelanto > total:
-            st.error("El adelanto no puede ser mayor al total")
-        else:
-            registrar_venta({
-                "cliente": cliente,
-                "producto": producto,
-                "detalle": detalle,
-                "metodo_pago": metodo_pago,
-                "total": total,
-                "tipo_pago": "Adelanto",
-                "monto_pagado": adelanto,
-                "restante": total - adelanto
-            })
-
-# ===================================
-# 🧾 COMPLETAR PAGO
-# ===================================
-with tab_objects[2]:
-
-    st.subheader("Completar Pagos Pendientes")
-
-    pendientes = supabase.table("ventas").select("*").gt("restante",0).execute().data
-
-    if not pendientes:
-        st.success("No hay pagos pendientes")
     else:
-        for venta in pendientes:
+        adelanto = st.number_input("Monto del adelanto", min_value=0.0, step=1.0)
+        pagado = adelanto
+        saldo = total - adelanto
+        estado = "Pendiente" if saldo > 0 else "Pagado"
+
+        st.info(f"Saldo pendiente: S/. {saldo:.2f}")
+
+    if st.button("➕ Registrar venta"):
+        registrar_venta({
+            "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
+            "Cliente": cliente,
+            "Producto": producto,
+            "Total": round(total, 2),
+            "Pagado": round(pagado, 2),
+            "Saldo": round(saldo, 2),
+            "Estado": estado,
+            "Método de pago": metodo_pago
+        })
+
+
+# =====================================================
+# 📊 VENTAS DEL DÍA
+# =====================================================
+with tab_ventas:
+    st.subheader("Ventas registradas")
+
+    if not st.session_state.ventas:
+        st.warning("No hay ventas registradas")
+    else:
+        total_dia = sum(float(v["Total"]) for v in st.session_state.ventas)
+        total_cobrado = sum(float(v["Pagado"]) for v in st.session_state.ventas)
+        total_pendiente = sum(float(v["Saldo"]) for v in st.session_state.ventas)
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("💰 Total vendido", f"S/. {total_dia:.2f}")
+        col2.metric("💵 Total cobrado", f"S/. {total_cobrado:.2f}")
+        col3.metric("🧾 Total pendiente", f"S/. {total_pendiente:.2f}")
+
+        st.divider()
+
+        for i, venta in enumerate(st.session_state.ventas):
             with st.container(border=True):
-                st.write(f"Cliente: {venta['cliente']}")
-                st.write(f"Producto: {venta['producto']}")
-                st.write(f"Restante: S/ {venta['restante']}")
+                st.markdown(f"### 🧾 Venta #{i+1}")
+                st.write(f"👤 Cliente: {venta['Cliente']}")
+                st.write(f"📦 Producto: {venta['Producto']}")
+                st.write(f"💰 Total: S/. {venta['Total']}")
+                st.write(f"💵 Pagado: S/. {venta['Pagado']}")
+                st.write(f"🧾 Saldo: S/. {venta['Saldo']}")
+                st.write(f"📌 Estado: {venta['Estado']}")
+                st.write(f"💳 Método: {venta['Método de pago']}")
 
-                if st.button("Completar Pago", key=f"pago_{venta['id']}"):
+                colA, colB = st.columns(2)
 
-                    supabase.table("ventas").update({
-                        "monto_pagado": venta["total"],
-                        "restante": 0,
-                        "tipo_pago": "Completo"
-                    }).eq("id", venta["id"]).execute()
+                if venta["Estado"] == "Pendiente":
+                    with colA:
+                        if st.button("💳 Completar pago", key=f"pagar_{i}"):
+                            venta["Pagado"] = venta["Total"]
+                            venta["Saldo"] = 0
+                            venta["Estado"] = "Pagado"
+                            guardar_ventas()
+                            st.rerun()
 
-                    st.success("Pago completado")
-                    st.rerun()
+                with colB:
+                    if st.button("🗑 Eliminar", key=f"del_{i}"):
+                        st.session_state.ventas.pop(i)
+                        guardar_ventas()
+                        st.rerun()
 
-# ===================================
-# 📁 PDF
-# ===================================
-with tab_objects[3]:
+# =====================================================
+# 📁 CIERRE Y PDF
+# =====================================================
+with tab_cierre:
+    st.subheader("Generar reporte del día")
 
-    st.subheader("Reporte PDF")
+    if not st.session_state.ventas:
+        st.warning("No hay ventas para exportar")
+    else:
+        if st.button("📄 Generar PDF"):
+            nombre_pdf = f"reporte_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+            doc = SimpleDocTemplate(nombre_pdf)
+            elementos = []
 
-    ventas = obtener_ventas()
+            estilos = getSampleStyleSheet()
 
-    if ventas:
-        if st.button("Generar PDF del día"):
+            # Logo
+            if os.path.exists("logo.png"):
+                logo = RLImage("logo.png", width=120, height=60)
+                elementos.append(logo)
+                elementos.append(Spacer(1, 20))
 
-            df = pd.DataFrame(ventas)
-            total_dia = df["monto_pagado"].sum()
+            elementos.append(Paragraph("<b>REPORTE DE VENTAS DEL DÍA</b>", estilos["Title"]))
+            elementos.append(Spacer(1, 20))
 
-            file_path = "reporte_ventas.pdf"
-            doc = SimpleDocTemplate(file_path, pagesize=A4)
-            elements = []
+            data = [["Cliente", "Producto", "Total", "Pagado", "Saldo", "Estado"]]
 
-            style = ParagraphStyle(name='Normal', fontSize=10)
-
-            elements.append(Paragraph("<b>NSJ CAPROYECT</b>", style))
-            elements.append(Spacer(1, 0.3 * inch))
-            elements.append(Paragraph(f"Fecha: {datetime.now().strftime('%d/%m/%Y')}", style))
-            elements.append(Spacer(1, 0.3 * inch))
-
-            data = [["Cliente","Producto","Pagado","Restante"]]
-
-            for v in ventas:
+            for v in st.session_state.ventas:
                 data.append([
-                    v["cliente"],
-                    v["producto"],
-                    f"S/ {v['monto_pagado']}",
-                    f"S/ {v['restante']}"
+                    v["Cliente"],
+                    v["Producto"],
+                    f"S/. {v['Total']}",
+                    f"S/. {v['Pagado']}",
+                    f"S/. {v['Saldo']}",
+                    v["Estado"]
                 ])
 
-            table = Table(data)
-            table.setStyle(TableStyle([
-                ('BACKGROUND',(0,0),(-1,0),colors.grey),
-                ('GRID',(0,0),(-1,-1),1,colors.black)
+            tabla = Table(data, repeatRows=1)
+            tabla.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                ('ALIGN', (2, 1), (-2, -1), 'RIGHT'),
             ]))
 
-            elements.append(table)
-            elements.append(Spacer(1, 0.5 * inch))
-            elements.append(Paragraph(f"<b>Total Ingresado: S/ {total_dia:.2f}</b>", style))
+            elementos.append(tabla)
+            elementos.append(Spacer(1, 30))
 
-            doc.build(elements)
+            total_dia = sum(float(v["Total"]) for v in st.session_state.ventas)
+            total_cobrado = sum(float(v["Pagado"]) for v in st.session_state.ventas)
+            total_pendiente = sum(float(v["Saldo"]) for v in st.session_state.ventas)
 
-            with open(file_path, "rb") as f:
-                st.download_button("Descargar PDF", f, file_path)
+            elementos.append(Paragraph(f"<b>Total vendido:</b> S/. {total_dia:.2f}", estilos["Normal"]))
+            elementos.append(Paragraph(f"<b>Total cobrado:</b> S/. {total_cobrado:.2f}", estilos["Normal"]))
+            elementos.append(Paragraph(f"<b>Total pendiente:</b> S/. {total_pendiente:.2f}", estilos["Normal"]))
 
-# ===================================
-# 📊 PANEL GERENTE
-# ===================================
-if st.session_state.user_role == "gerente":
-    with tab_objects[-1]:
+            doc.build(elementos)
 
-        st.subheader("Panel Gerencial")
+            with open(nombre_pdf, "rb") as file:
+                st.download_button("⬇️ Descargar PDF", file, nombre_pdf)
 
-        ventas = obtener_ventas()
+        st.divider()
 
-        if ventas:
-            df = pd.DataFrame(ventas)
-
-            total_ingresado = df["monto_pagado"].sum()
-            total_pendiente = df["restante"].sum()
-
-            col1, col2 = st.columns(2)
-            col1.metric("💰 Total Ingresado", f"S/ {total_ingresado:.2f}")
-            col2.metric("🟡 Pendiente por Cobrar", f"S/ {total_pendiente:.2f}")
-
-            st.dataframe(df)
+        if st.button("🧹 Cerrar día"):
+            st.session_state.ventas.clear()
+            if os.path.exists(ARCHIVO_VENTAS):
+                os.remove(ARCHIVO_VENTAS)
+            st.success("✅ Día cerrado correctamente")
+            st.rerun()
