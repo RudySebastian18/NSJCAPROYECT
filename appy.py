@@ -7,7 +7,6 @@ from reportlab.lib import colors
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib.pagesizes import A4
-import os
 
 # ===================================
 # CONFIGURACIÓN
@@ -68,7 +67,8 @@ def registrar_venta(data):
     st.rerun()
 
 def obtener_ventas():
-    return supabase.table("ventas").select("*").order("fecha", desc=True).execute().data
+    response = supabase.table("ventas").select("*").order("fecha", desc=True).execute()
+    return response.data
 
 # ===================================
 # TABS
@@ -85,28 +85,36 @@ tab_objects = st.tabs(tabs)
 # ===================================
 with tab_objects[0]:
 
+    st.subheader("Registrar Venta Completa")
+
     cliente = st.text_input("Cliente")
     producto = st.text_input("Producto")
     detalle = st.text_input("Detalle")
     metodo_pago = st.selectbox("Método de pago", ["Efectivo","Yape","Plin","Transferencia"])
     total = st.number_input("Total", min_value=1.0, step=1.0)
 
-    if st.button("Registrar Venta"):
-        registrar_venta({
-            "cliente": cliente,
-            "producto": producto,
-            "detalle": detalle,
-            "metodo_pago": metodo_pago,
-            "total": total,
-            "tipo_pago": "Completo",
-            "monto_pagado": total,
-            "restante": 0
-        })
+    if st.button("Registrar Venta Completa"):
+
+        if cliente and producto:
+            registrar_venta({
+                "cliente": cliente,
+                "producto": producto,
+                "detalle": detalle,
+                "metodo_pago": metodo_pago,
+                "total": total,
+                "tipo_pago": "Completo",
+                "monto_pagado": total,
+                "restante": 0
+            })
+        else:
+            st.error("Completa los campos")
 
 # ===================================
 # 🟡 ADELANTO
 # ===================================
 with tab_objects[1]:
+
+    st.subheader("Registrar Adelanto")
 
     cliente = st.text_input("Cliente (adelanto)")
     producto = st.text_input("Producto (adelanto)")
@@ -116,21 +124,27 @@ with tab_objects[1]:
     adelanto = st.number_input("Monto adelantado", min_value=1.0, step=1.0)
 
     if st.button("Registrar Adelanto"):
-        registrar_venta({
-            "cliente": cliente,
-            "producto": producto,
-            "detalle": detalle,
-            "metodo_pago": metodo_pago,
-            "total": total,
-            "tipo_pago": "Adelanto",
-            "monto_pagado": adelanto,
-            "restante": total - adelanto
-        })
+
+        if adelanto > total:
+            st.error("El adelanto no puede ser mayor al total")
+        else:
+            registrar_venta({
+                "cliente": cliente,
+                "producto": producto,
+                "detalle": detalle,
+                "metodo_pago": metodo_pago,
+                "total": total,
+                "tipo_pago": "Adelanto",
+                "monto_pagado": adelanto,
+                "restante": total - adelanto
+            })
 
 # ===================================
 # 🧾 COMPLETAR PAGO
 # ===================================
 with tab_objects[2]:
+
+    st.subheader("Completar Pagos Pendientes")
 
     pendientes = supabase.table("ventas").select("*").gt("restante",0).execute().data
 
@@ -143,7 +157,8 @@ with tab_objects[2]:
                 st.write(f"Producto: {venta['producto']}")
                 st.write(f"Restante: S/ {venta['restante']}")
 
-                if st.button("Completar Pago", key=venta["id"]):
+                if st.button("Completar Pago", key=f"pago_{venta['id']}"):
+
                     supabase.table("ventas").update({
                         "monto_pagado": venta["total"],
                         "restante": 0,
@@ -154,9 +169,11 @@ with tab_objects[2]:
                     st.rerun()
 
 # ===================================
-# 📁 PDF DEL DÍA
+# 📁 PDF
 # ===================================
 with tab_objects[3]:
+
+    st.subheader("Reporte PDF")
 
     ventas = obtener_ventas()
 
@@ -195,7 +212,7 @@ with tab_objects[3]:
 
             elements.append(table)
             elements.append(Spacer(1, 0.5 * inch))
-            elements.append(Paragraph(f"<b>Total Ingresado Hoy: S/ {total_dia:.2f}</b>", style))
+            elements.append(Paragraph(f"<b>Total Ingresado: S/ {total_dia:.2f}</b>", style))
 
             doc.build(elements)
 
@@ -208,6 +225,8 @@ with tab_objects[3]:
 if st.session_state.user_role == "gerente":
     with tab_objects[-1]:
 
+        st.subheader("Panel Gerencial")
+
         ventas = obtener_ventas()
 
         if ventas:
@@ -216,7 +235,8 @@ if st.session_state.user_role == "gerente":
             total_ingresado = df["monto_pagado"].sum()
             total_pendiente = df["restante"].sum()
 
-            st.metric("💰 Total Ingresado", f"S/ {total_ingresado:.2f}")
-            st.metric("🟡 Pendiente por Cobrar", f"S/ {total_pendiente:.2f}")
+            col1, col2 = st.columns(2)
+            col1.metric("💰 Total Ingresado", f"S/ {total_ingresado:.2f}")
+            col2.metric("🟡 Pendiente por Cobrar", f"S/ {total_pendiente:.2f}")
 
             st.dataframe(df)
