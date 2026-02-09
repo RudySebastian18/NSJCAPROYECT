@@ -83,13 +83,27 @@ with tab_venta:
     cliente = st.text_input("Cliente")
     producto = st.text_input("Producto / Descripción")
     total = st.number_input("Total del producto (S/.)", min_value=0.0, step=1.0)
-    adelanto = st.number_input("Adelanto (opcional)", min_value=0.0, step=1.0)
     metodo_pago = st.selectbox("Método de pago", METODOS_PAGO)
 
-    saldo = total - adelanto
-    estado = "Pagado" if saldo <= 0 else "Pendiente"
+    tipo_pago = st.radio(
+        "Tipo de pago",
+        ["Pago completo", "Adelanto"]
+    )
 
-    st.info(f"Saldo pendiente: S/. {saldo:.2f}")
+    if tipo_pago == "Pago completo":
+        pagado = total
+        saldo = 0
+        estado = "Pagado"
+
+        st.success("✔ Venta pagada completamente")
+
+    else:
+        adelanto = st.number_input("Monto del adelanto", min_value=0.0, step=1.0)
+        pagado = adelanto
+        saldo = total - adelanto
+        estado = "Pendiente" if saldo > 0 else "Pagado"
+
+        st.info(f"Saldo pendiente: S/. {saldo:.2f}")
 
     if st.button("➕ Registrar venta"):
         registrar_venta({
@@ -97,11 +111,12 @@ with tab_venta:
             "Cliente": cliente,
             "Producto": producto,
             "Total": round(total, 2),
-            "Pagado": round(adelanto, 2),
+            "Pagado": round(pagado, 2),
             "Saldo": round(saldo, 2),
             "Estado": estado,
             "Método de pago": metodo_pago
         })
+
 
 # =====================================================
 # 📊 VENTAS DEL DÍA
@@ -160,7 +175,7 @@ with tab_cierre:
     if not st.session_state.ventas:
         st.warning("No hay ventas para exportar")
     else:
-        if st.button("📄 Generar PDF profesional"):
+        if st.button("📄 Generar PDF"):
             nombre_pdf = f"reporte_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
             doc = SimpleDocTemplate(nombre_pdf)
             elementos = []
