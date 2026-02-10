@@ -7,11 +7,8 @@ from PIL import Image
 # PDF
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
 from reportlab.lib import colors
-from reportlab.lib.styles import ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.lib import colors
-from reportlab.platypus import Paragraph
 from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch
 
 # -------------------------
 # CONFIGURACIÓN
@@ -85,25 +82,25 @@ with tab_venta:
     total = st.number_input("Total del producto (S/.)", min_value=0.0, step=1.0)
     metodo_pago = st.selectbox("Método de pago", METODOS_PAGO)
 
-    tipo_pago = st.radio(
-        "Tipo de pago",
-        ["Pago completo", "Adelanto"]
-    )
+    tipo_pago = st.radio("Tipo de pago", ["Pago completo", "Adelanto"])
 
     if tipo_pago == "Pago completo":
         pagado = total
         saldo = 0
         estado = "Pagado"
-
         st.success("✔ Venta pagada completamente")
-
     else:
         adelanto = st.number_input("Monto del adelanto", min_value=0.0, step=1.0)
         pagado = adelanto
         saldo = total - adelanto
         estado = "Pendiente" if saldo > 0 else "Pagado"
-
         st.info(f"Saldo pendiente: S/. {saldo:.2f}")
+
+    # ✅ NUEVO: Estado de entrega
+    estado_entrega = st.selectbox(
+        "Estado del pedido",
+        ["Pendiente", "Entregado"]
+    )
 
     if st.button("➕ Registrar venta"):
         registrar_venta({
@@ -114,9 +111,9 @@ with tab_venta:
             "Pagado": round(pagado, 2),
             "Saldo": round(saldo, 2),
             "Estado": estado,
-            "Método de pago": metodo_pago
+            "Método de pago": metodo_pago,
+            "Entrega": estado_entrega
         })
-
 
 # =====================================================
 # 📊 VENTAS DEL DÍA
@@ -147,10 +144,12 @@ with tab_ventas:
                 st.write(f"💵 Pagado: S/. {venta['Pagado']}")
                 st.write(f"🧾 Saldo: S/. {venta['Saldo']}")
                 st.write(f"📌 Estado: {venta['Estado']}")
+                st.write(f"🚚 Entrega: {venta['Entrega']}")
                 st.write(f"💳 Método: {venta['Método de pago']}")
 
-                colA, colB = st.columns(2)
+                colA, colB, colC = st.columns(3)
 
+                # Completar pago
                 if venta["Estado"] == "Pendiente":
                     with colA:
                         if st.button("💳 Completar pago", key=f"pagar_{i}"):
@@ -160,14 +159,23 @@ with tab_ventas:
                             guardar_ventas()
                             st.rerun()
 
-                with colB:
+                # ✅ Marcar como entregado
+                if venta["Entrega"] == "Pendiente":
+                    with colB:
+                        if st.button("🚚 Marcar entregado", key=f"entregar_{i}"):
+                            venta["Entrega"] = "Entregado"
+                            guardar_ventas()
+                            st.rerun()
+
+                # Eliminar
+                with colC:
                     if st.button("🗑 Eliminar", key=f"del_{i}"):
                         st.session_state.ventas.pop(i)
                         guardar_ventas()
                         st.rerun()
 
 # =====================================================
-# 📁 CIERRE Y PDF
+# 📁 CIERRE Y PDF PROFESIONAL
 # =====================================================
 with tab_cierre:
     st.subheader("Generar reporte del día")
@@ -176,55 +184,68 @@ with tab_cierre:
         st.warning("No hay ventas para exportar")
     else:
         if st.button("📄 Generar PDF"):
-            nombre_pdf = f"reporte_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+
+            nombre_pdf = f"Factura_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
             doc = SimpleDocTemplate(nombre_pdf)
             elementos = []
-
             estilos = getSampleStyleSheet()
 
-            # Logo
-            if os.path.exists("logo.png"):
-                logo = RLImage("logo.png", width=120, height=60)
-                elementos.append(logo)
-                elementos.append(Spacer(1, 20))
+            # ENCABEZADO
+            elementos.append(Paragraph("<b>NSJ CAPROYECT</b>", estilos["Title"]))
+            elementos.append(Paragraph("Sistema de Ventas Interno", estilos["Normal"]))
+            elementos.append(Spacer(1, 10))
 
-            elementos.append(Paragraph("<b>REPORTE DE VENTAS DEL DÍA</b>", estilos["Title"]))
+            fecha_actual = datetime.now().strftime("%d/%m/%Y %H:%M")
+            elementos.append(Paragraph(f"<b>Fecha:</b> {fecha_actual}", estilos["Normal"]))
+            elementos.append(Paragraph(f"<b>N° Factura:</b> {datetime.now().strftime('%Y%m%d%H%M')}", estilos["Normal"]))
             elementos.append(Spacer(1, 20))
 
-            data = [["Cliente", "Producto", "Total", "Pagado", "Saldo", "Estado"]]
+            # TABLA
+            data = [["Cliente", "Producto", "Total", "Pagado", "Saldo", "Estado", "Entrega"]]
 
             for v in st.session_state.ventas:
                 data.append([
                     v["Cliente"],
                     v["Producto"],
-                    f"S/. {v['Total']}",
-                    f"S/. {v['Pagado']}",
-                    f"S/. {v['Saldo']}",
-                    v["Estado"]
+                    f"S/. {v['Total']:.2f}",
+                    f"S/. {v['Pagado']:.2f}",
+                    f"S/. {v['Saldo']:.2f}",
+                    v["Estado"],
+                    v["Entrega"]
                 ])
 
             tabla = Table(data, repeatRows=1)
+
             tabla.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-                ('ALIGN', (2, 1), (-2, -1), 'RIGHT'),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2E4053")),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('ALIGN', (2, 1), (4, -1), 'RIGHT'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
             ]))
 
             elementos.append(tabla)
-            elementos.append(Spacer(1, 30))
+            elementos.append(Spacer(1, 25))
 
+            # TOTALES
             total_dia = sum(float(v["Total"]) for v in st.session_state.ventas)
             total_cobrado = sum(float(v["Pagado"]) for v in st.session_state.ventas)
             total_pendiente = sum(float(v["Saldo"]) for v in st.session_state.ventas)
 
-            elementos.append(Paragraph(f"<b>Total vendido:</b> S/. {total_dia:.2f}", estilos["Normal"]))
-            elementos.append(Paragraph(f"<b>Total cobrado:</b> S/. {total_cobrado:.2f}", estilos["Normal"]))
-            elementos.append(Paragraph(f"<b>Total pendiente:</b> S/. {total_pendiente:.2f}", estilos["Normal"]))
+            elementos.append(Paragraph("<b>RESUMEN GENERAL</b>", estilos["Heading2"]))
+            elementos.append(Spacer(1, 10))
+            elementos.append(Paragraph(f"Total vendido: S/. {total_dia:.2f}", estilos["Normal"]))
+            elementos.append(Paragraph(f"Total cobrado: S/. {total_cobrado:.2f}", estilos["Normal"]))
+            elementos.append(Paragraph(f"Total pendiente: S/. {total_pendiente:.2f}", estilos["Normal"]))
+
+            elementos.append(Spacer(1, 30))
+            elementos.append(Paragraph("Gracias por su preferencia.", estilos["Normal"]))
 
             doc.build(elementos)
 
             with open(nombre_pdf, "rb") as file:
-                st.download_button("⬇️ Descargar PDF", file, nombre_pdf)
+                st.download_button("⬇️ Descargar Factura", file, nombre_pdf)
 
         st.divider()
 
