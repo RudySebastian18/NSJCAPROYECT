@@ -96,11 +96,7 @@ with tab_venta:
         estado = "Pendiente" if saldo > 0 else "Pagado"
         st.info(f"Saldo pendiente: S/. {saldo:.2f}")
 
-    # ✅ NUEVO: Estado de entrega
-    estado_entrega = st.selectbox(
-        "Estado del pedido",
-        ["Pendiente", "Entregado"]
-    )
+    estado_entrega = st.selectbox("Estado del pedido", ["Pendiente", "Entregado"])
 
     if st.button("➕ Registrar venta"):
         registrar_venta({
@@ -135,6 +131,19 @@ with tab_ventas:
 
         st.divider()
 
+        # ✅ NUEVO: Estadística métodos de pago
+        st.subheader("📊 Métodos de pago más usados")
+        df_metodos = pd.DataFrame(st.session_state.ventas)
+
+        if "Método de pago" in df_metodos.columns:
+            conteo_metodos = df_metodos["Método de pago"].value_counts()
+            st.bar_chart(conteo_metodos)
+
+            for metodo, cantidad in conteo_metodos.items():
+                st.write(f"💳 {metodo}: {cantidad} ventas")
+
+        st.divider()
+
         for i, venta in enumerate(st.session_state.ventas):
             with st.container(border=True):
                 st.markdown(f"### 🧾 Venta #{i+1}")
@@ -149,7 +158,6 @@ with tab_ventas:
 
                 colA, colB, colC = st.columns(3)
 
-                # Completar pago
                 if venta["Estado"] == "Pendiente":
                     with colA:
                         if st.button("💳 Completar pago", key=f"pagar_{i}"):
@@ -159,7 +167,6 @@ with tab_ventas:
                             guardar_ventas()
                             st.rerun()
 
-                # ✅ Marcar como entregado
                 if venta["Entrega"] == "Pendiente":
                     with colB:
                         if st.button("🚚 Marcar entregado", key=f"entregar_{i}"):
@@ -167,7 +174,6 @@ with tab_ventas:
                             guardar_ventas()
                             st.rerun()
 
-                # Eliminar
                 with colC:
                     if st.button("🗑 Eliminar", key=f"del_{i}"):
                         st.session_state.ventas.pop(i)
@@ -175,7 +181,7 @@ with tab_ventas:
                         st.rerun()
 
 # =====================================================
-# 📁 CIERRE Y PDF PROFESIONAL
+# 📁 CIERRE Y PDF
 # =====================================================
 with tab_cierre:
     st.subheader("Generar reporte del día")
@@ -184,13 +190,11 @@ with tab_cierre:
         st.warning("No hay ventas para exportar")
     else:
         if st.button("📄 Generar PDF"):
-
             nombre_pdf = f"Factura_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
             doc = SimpleDocTemplate(nombre_pdf)
             elementos = []
             estilos = getSampleStyleSheet()
 
-            # ENCABEZADO
             elementos.append(Paragraph("<b>NSJ CAPROYECT</b>", estilos["Title"]))
             elementos.append(Paragraph("Sistema de Ventas Interno", estilos["Normal"]))
             elementos.append(Spacer(1, 10))
@@ -200,8 +204,8 @@ with tab_cierre:
             elementos.append(Paragraph(f"<b>N° Factura:</b> {datetime.now().strftime('%Y%m%d%H%M')}", estilos["Normal"]))
             elementos.append(Spacer(1, 20))
 
-            # TABLA
-            data = [["Cliente", "Producto", "Total", "Pagado", "Saldo", "Estado", "Entrega"]]
+            # ✅ MÉTODO DE PAGO agregado a la tabla
+            data = [["Cliente", "Producto", "Total", "Pagado", "Saldo", "Estado", "Entrega", "Método Pago"]]
 
             for v in st.session_state.ventas:
                 data.append([
@@ -211,7 +215,8 @@ with tab_cierre:
                     f"S/. {v['Pagado']:.2f}",
                     f"S/. {v['Saldo']:.2f}",
                     v["Estado"],
-                    v["Entrega"]
+                    v["Entrega"],
+                    v["Método de pago"]
                 ])
 
             tabla = Table(data, repeatRows=1)
@@ -228,7 +233,6 @@ with tab_cierre:
             elementos.append(tabla)
             elementos.append(Spacer(1, 25))
 
-            # TOTALES
             total_dia = sum(float(v["Total"]) for v in st.session_state.ventas)
             total_cobrado = sum(float(v["Pagado"]) for v in st.session_state.ventas)
             total_pendiente = sum(float(v["Saldo"]) for v in st.session_state.ventas)
@@ -238,6 +242,16 @@ with tab_cierre:
             elementos.append(Paragraph(f"Total vendido: S/. {total_dia:.2f}", estilos["Normal"]))
             elementos.append(Paragraph(f"Total cobrado: S/. {total_cobrado:.2f}", estilos["Normal"]))
             elementos.append(Paragraph(f"Total pendiente: S/. {total_pendiente:.2f}", estilos["Normal"]))
+
+            # ✅ NUEVO: Resumen métodos de pago en PDF
+            elementos.append(Spacer(1, 20))
+            elementos.append(Paragraph("<b>Métodos de pago utilizados:</b>", estilos["Heading3"]))
+
+            df_metodos = pd.DataFrame(st.session_state.ventas)
+            conteo_metodos = df_metodos["Método de pago"].value_counts()
+
+            for metodo, cantidad in conteo_metodos.items():
+                elementos.append(Paragraph(f"{metodo}: {cantidad} ventas", estilos["Normal"]))
 
             elementos.append(Spacer(1, 30))
             elementos.append(Paragraph("Gracias por su preferencia.", estilos["Normal"]))
