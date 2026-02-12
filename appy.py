@@ -328,23 +328,24 @@ with tab_estadisticas:
 # REPORTE PROFESIONAL
 # ======================================
 with tab_reporte:
-        st.divider()
+
+    st.divider()
     st.subheader("🔒 Cierre de Caja")
-    
+
     if st.button("Realizar Cierre de Caja"):
         resultado = cierre_de_caja(st.session_state.usuario)
-    
+
         if resultado:
             st.success("✅ Cierre realizado correctamente")
             st.rerun()
         else:
             st.warning("No hay ventas entregadas y pagadas para cerrar")
-    
+
     st.divider()
     st.subheader("📜 Historial de Cierres")
-    
+
     cierres = obtener_cierres()
-    
+
     if cierres:
         for c in cierres:
             with st.container(border=True):
@@ -358,30 +359,26 @@ with tab_reporte:
                 st.write(f"🕒 Registrado: {c[7]}")
     else:
         st.info("No hay cierres registrados aún.")
-    
-        ventas = obtener_ventas()
+
+    st.divider()
+
+    ventas = obtener_ventas()
 
     if not ventas:
         st.warning("No hay ventas para generar reporte")
     else:
-        if st.button("Generar PDF "):
+        if st.button("Generar PDF"):
 
             nombre_pdf = f"reporte_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
             doc = SimpleDocTemplate(nombre_pdf)
             elementos = []
             estilos = getSampleStyleSheet()
 
-            # -------------------------
-            # TÍTULO
-            # -------------------------
             elementos.append(Paragraph("<b>SISTEMA COMERCIAL - NSJ CAPROYECT</b>", estilos["Title"]))
             elementos.append(Spacer(1, 10))
             elementos.append(Paragraph(f"Fecha de emisión: {datetime.now().strftime('%d/%m/%Y %H:%M')}", estilos["Normal"]))
             elementos.append(Spacer(1, 20))
 
-            # -------------------------
-            # TOTALES
-            # -------------------------
             total_vendido = sum(v["Total"] for v in ventas)
             total_cobrado = sum(v["Pagado"] for v in ventas)
             total_pendiente = sum(v["Saldo"] for v in ventas)
@@ -391,9 +388,6 @@ with tab_reporte:
             elementos.append(Paragraph(f"<b>Total Pendiente:</b> S/. {total_pendiente:.2f}", estilos["Normal"]))
             elementos.append(Spacer(1, 15))
 
-            # -------------------------
-            # RESUMEN MÉTODOS
-            # -------------------------
             metodos = {}
             for v in ventas:
                 metodos[v["Método de pago"]] = metodos.get(v["Método de pago"], 0) + v["Pagado"]
@@ -406,9 +400,6 @@ with tab_reporte:
 
             elementos.append(Spacer(1, 20))
 
-            # -------------------------
-            # TABLA DETALLADA DE VENTAS
-            # -------------------------
             elementos.append(Paragraph("<b>Detalle Completo de Ventas</b>", estilos["Heading2"]))
             elementos.append(Spacer(1, 10))
 
@@ -449,11 +440,8 @@ with tab_reporte:
 
             elementos.append(tabla)
 
-            # -------------------------
-            # GENERAR
-            # -------------------------
             doc.build(elementos)
 
             with open(nombre_pdf, "rb") as f:
                 st.download_button("Descargar PDF", f, nombre_pdf)
-             
+
