@@ -65,8 +65,10 @@ def obtener_ventas():
     cur.execute("""
         SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
         FROM ventas
+        WHERE cerrado = FALSE
         ORDER BY fecha DESC
     """)
+
     rows = cur.fetchall()
     conn.close()
 
@@ -136,6 +138,85 @@ def marcar_entrega(id_venta, estado):
     conn.commit()
     conn.close()
     st.rerun()
+    
+def cierre_de_caja(usuario_actual):
+    conn = conectar()
+    cur = conn.cursor()
+
+    # Obtener ventas cerrables
+    cur.execute("""
+        SELECT id, pagado, metodo_pago
+        FROM ventas
+        WHERE cerrado = FALSE
+        AND entrega = 'Entregado'
+        AND saldo = 0
+    """)
+    ventas = cur.fetchall()
+
+    if not ventas:
+        conn.close()
+        return False
+
+    total_general = 0
+    totales_metodo = {
+        "Efectivo": 0,
+        "Yape": 0,
+        "Plin": 0,
+        "Transferencia": 0
+    }
+
+    ids = []
+
+    for v in ventas:
+        ids.append(v[0])
+        monto = float(v[1])
+        metodo = v[2]
+
+        total_general += monto
+        if metodo in totales_metodo:
+            totales_metodo[metodo] += monto
+
+    # Insertar cierre
+    cur.execute("""
+        INSERT INTO cierres_caja
+        (fecha, total_general, total_efectivo, total_yape, total_plin, total_transferencia, usuario)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """, (
+        datetime.now().date(),
+        total_general,
+        totales_metodo["Efectivo"],
+        totales_metodo["Yape"],
+        totales_metodo["Plin"],
+        totales_metodo["Transferencia"],
+        usuario_actual
+    ))
+
+    # Marcar ventas como cerradas
+    cur.execute("""
+        UPDATE ventas
+        SET cerrado = TRUE
+        WHERE id = ANY(%s)
+    """, (ids,))
+
+    conn.commit()
+    conn.close()
+
+    return True
+
+def obtener_cierres():
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT fecha, total_general, total_efectivo,
+               total_yape, total_plin, total_transferencia,
+               usuario, created_at
+        FROM cierres_caja
+        ORDER BY created_at DESC
+    """)
+    data = cur.fetchall()
+    conn.close()
+    return data
+
 
 # --------------------------------
 # INTERFAZ
@@ -344,3 +425,35 @@ with tab_reporte:
 
             with open(nombre_pdf, "rb") as f:
                 st.download_button("Descargar PDF", f, nombre_pdf)
+            st.divider()
+            
+            st.subheader("🔒 Cierre de Caja")
+
+            if st.button("Realizar Cierre de Caja"):
+                resultado = cierre_de_caja(st.session_state.usuario)
+
+            if resultado:
+                st.success("✅ Cierre realizado correctamente")
+                st.rerun()
+            else:
+              st.warning("No hay ventas entregadas y pagadas para cerrar")
+
+            st.divider()
+            st.subheader("📜 Historial de Cierres")
+
+            cierres = obtener_cierres()
+
+            if cierres:
+                for c in cierres:
+                    with st.container(border=True):
+                        st.write(f"📅 Fecha: {c[0]}")
+                        st.write(f"💰 Total General: S/. {c[1]}")
+                        st.write(f"Efectivo: S/. {c[2]}")
+                        st.write(f"Yape: S/. {c[3]}")
+                        st.write(f"Plin: S/. {c[4]}")
+                        st.write(f"Transferencia: S/. {c[5]}")
+                        st.write(f"👤 Usuario: {c[6]}")
+                        st.write(f"🕒 Registrado: {c[7]}")
+            else:
+                st.info("No hay cierres registrados aún.")
+
