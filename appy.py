@@ -243,37 +243,104 @@ with tab_estadisticas:
 # ======================================
 # REPORTE PROFESIONAL
 # ======================================
+# ======================================
+# REPORTE PROFESIONAL
+# ======================================
 with tab_reporte:
     ventas = obtener_ventas()
 
-    if st.button("Generar PDF Profesional"):
-        nombre_pdf = f"reporte_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-        doc = SimpleDocTemplate(nombre_pdf)
-        elementos = []
-        estilos = getSampleStyleSheet()
+    if not ventas:
+        st.warning("No hay ventas para generar reporte")
+    else:
+        if st.button("Generar PDF Profesional"):
 
-        elementos.append(Paragraph("<b>REPORTE PROFESIONAL DE VENTAS</b>", estilos["Title"]))
-        elementos.append(Spacer(1, 20))
+            nombre_pdf = f"reporte_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+            doc = SimpleDocTemplate(nombre_pdf)
+            elementos = []
+            estilos = getSampleStyleSheet()
 
-        total_vendido = sum(v["Total"] for v in ventas)
-        total_cobrado = sum(v["Pagado"] for v in ventas)
-        total_pendiente = sum(v["Saldo"] for v in ventas)
+            # -------------------------
+            # TÍTULO
+            # -------------------------
+            elementos.append(Paragraph("<b>SISTEMA COMERCIAL - NSJ CAPROYECT</b>", estilos["Title"]))
+            elementos.append(Spacer(1, 10))
+            elementos.append(Paragraph(f"Fecha de emisión: {datetime.now().strftime('%d/%m/%Y %H:%M')}", estilos["Normal"]))
+            elementos.append(Spacer(1, 20))
 
-        metodos = {}
-        for v in ventas:
-            metodos[v["Método de pago"]] = metodos.get(v["Método de pago"], 0) + v["Pagado"]
+            # -------------------------
+            # TOTALES
+            # -------------------------
+            total_vendido = sum(v["Total"] for v in ventas)
+            total_cobrado = sum(v["Pagado"] for v in ventas)
+            total_pendiente = sum(v["Saldo"] for v in ventas)
 
-        elementos.append(Paragraph(f"Total Vendido: S/. {total_vendido:.2f}", estilos["Normal"]))
-        elementos.append(Paragraph(f"Total Cobrado: S/. {total_cobrado:.2f}", estilos["Normal"]))
-        elementos.append(Paragraph(f"Total Pendiente: S/. {total_pendiente:.2f}", estilos["Normal"]))
-        elementos.append(Spacer(1, 15))
+            elementos.append(Paragraph(f"<b>Total Vendido:</b> S/. {total_vendido:.2f}", estilos["Normal"]))
+            elementos.append(Paragraph(f"<b>Total Cobrado (Ganancia Real):</b> S/. {total_cobrado:.2f}", estilos["Normal"]))
+            elementos.append(Paragraph(f"<b>Total Pendiente:</b> S/. {total_pendiente:.2f}", estilos["Normal"]))
+            elementos.append(Spacer(1, 15))
 
-        elementos.append(Paragraph("<b>Resumen por Método de Pago:</b>", estilos["Heading2"]))
+            # -------------------------
+            # RESUMEN MÉTODOS
+            # -------------------------
+            metodos = {}
+            for v in ventas:
+                metodos[v["Método de pago"]] = metodos.get(v["Método de pago"], 0) + v["Pagado"]
 
-        for metodo, monto in metodos.items():
-            elementos.append(Paragraph(f"{metodo}: S/. {monto:.2f}", estilos["Normal"]))
+            elementos.append(Paragraph("<b>Resumen por Método de Pago:</b>", estilos["Heading2"]))
+            elementos.append(Spacer(1, 10))
 
-        doc.build(elementos)
+            for metodo, monto in metodos.items():
+                elementos.append(Paragraph(f"{metodo}: S/. {monto:.2f}", estilos["Normal"]))
 
-        with open(nombre_pdf, "rb") as f:
-            st.download_button("Descargar PDF", f, nombre_pdf)
+            elementos.append(Spacer(1, 20))
+
+            # -------------------------
+            # TABLA DETALLADA DE VENTAS
+            # -------------------------
+            elementos.append(Paragraph("<b>Detalle Completo de Ventas</b>", estilos["Heading2"]))
+            elementos.append(Spacer(1, 10))
+
+            data = [[
+                "Fecha",
+                "Cliente",
+                "Producto",
+                "Total",
+                "Pagado",
+                "Saldo",
+                "Estado",
+                "Método",
+                "Entrega"
+            ]]
+
+            for v in ventas:
+                data.append([
+                    str(v["Fecha"]),
+                    v["Cliente"],
+                    v["Producto"],
+                    f"S/. {v['Total']:.2f}",
+                    f"S/. {v['Pagado']:.2f}",
+                    f"S/. {v['Saldo']:.2f}",
+                    v["Estado"],
+                    v["Método de pago"],
+                    v["Entrega"]
+                ])
+
+            tabla = Table(data, repeatRows=1)
+
+            tabla.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                ('ALIGN', (3, 1), (5, -1), 'RIGHT'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8)
+            ]))
+
+            elementos.append(tabla)
+
+            # -------------------------
+            # GENERAR
+            # -------------------------
+            doc.build(elementos)
+
+            with open(nombre_pdf, "rb") as f:
+                st.download_button("Descargar PDF Profesional", f, nombre_pdf)
