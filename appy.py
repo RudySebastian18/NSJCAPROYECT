@@ -343,4 +343,4 @@ with tab_reporte:
             doc.build(elementos)
 
             with open(nombre_pdf, "rb") as f:
-                st.download_button("Descargar PDF Profesional", f, nombre_pdf)
+                st.download_button("Descargar PDF", f, nombre_pdf)
