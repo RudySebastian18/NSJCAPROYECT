@@ -328,38 +328,38 @@ with tab_estadisticas:
 # REPORTE PROFESIONAL
 # ======================================
 with tab_reporte:
+        st.divider()
+    st.subheader("🔒 Cierre de Caja")
+    
+    if st.button("Realizar Cierre de Caja"):
+        resultado = cierre_de_caja(st.session_state.usuario)
+    
+        if resultado:
+            st.success("✅ Cierre realizado correctamente")
+            st.rerun()
+        else:
+            st.warning("No hay ventas entregadas y pagadas para cerrar")
+    
     st.divider()
-st.subheader("🔒 Cierre de Caja")
-
-if st.button("Realizar Cierre de Caja"):
-    resultado = cierre_de_caja(st.session_state.usuario)
-
-    if resultado:
-        st.success("✅ Cierre realizado correctamente")
-        st.rerun()
+    st.subheader("📜 Historial de Cierres")
+    
+    cierres = obtener_cierres()
+    
+    if cierres:
+        for c in cierres:
+            with st.container(border=True):
+                st.write(f"📅 Fecha: {c[0]}")
+                st.write(f"💰 Total General: S/. {c[1]}")
+                st.write(f"Efectivo: S/. {c[2]}")
+                st.write(f"Yape: S/. {c[3]}")
+                st.write(f"Plin: S/. {c[4]}")
+                st.write(f"Transferencia: S/. {c[5]}")
+                st.write(f"👤 Usuario: {c[6]}")
+                st.write(f"🕒 Registrado: {c[7]}")
     else:
-        st.warning("No hay ventas entregadas y pagadas para cerrar")
-
-st.divider()
-st.subheader("📜 Historial de Cierres")
-
-cierres = obtener_cierres()
-
-if cierres:
-    for c in cierres:
-        with st.container(border=True):
-            st.write(f"📅 Fecha: {c[0]}")
-            st.write(f"💰 Total General: S/. {c[1]}")
-            st.write(f"Efectivo: S/. {c[2]}")
-            st.write(f"Yape: S/. {c[3]}")
-            st.write(f"Plin: S/. {c[4]}")
-            st.write(f"Transferencia: S/. {c[5]}")
-            st.write(f"👤 Usuario: {c[6]}")
-            st.write(f"🕒 Registrado: {c[7]}")
-else:
-    st.info("No hay cierres registrados aún.")
-
-    ventas = obtener_ventas()
+        st.info("No hay cierres registrados aún.")
+    
+        ventas = obtener_ventas()
 
     if not ventas:
         st.warning("No hay ventas para generar reporte")
