@@ -151,7 +151,7 @@ st.divider()
 METODOS_PAGO = ["Efectivo", "Yape", "Plin", "Transferencia"]
 
 tab_venta, tab_ventas, tab_estadisticas, tab_reporte = st.tabs(
-    ["➕ Nueva Venta", "📊 Ventas", "📈 Estadísticas", "📄 Reporte Profesional"]
+    ["➕ Nueva Venta", "📊 Ventas", "📈 Estadísticas", "📄 Reporte"]
 )
 
 # ======================================
@@ -252,7 +252,7 @@ with tab_reporte:
     if not ventas:
         st.warning("No hay ventas para generar reporte")
     else:
-        if st.button("Generar PDF Profesional"):
+        if st.button("Generar PDF "):
 
             nombre_pdf = f"reporte_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
             doc = SimpleDocTemplate(nombre_pdf)
