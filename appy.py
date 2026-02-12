@@ -418,7 +418,7 @@ with tab_reporte:
 
             elementos.append(tabla)
 
-            st.divider()
+                st.divider()
                 st.subheader("🔒 Cierre de Caja")
                 
                 if st.button("Realizar Cierre de Caja"):
