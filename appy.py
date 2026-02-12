@@ -5,11 +5,14 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 
-st.set_page_config(page_title="Sistema NSJ CAPROYECT", layout="wide")
+# --------------------------------
+# CONFIG
+# --------------------------------
+st.set_page_config(page_title="Sistema Comercial - NSJ CAPROYECT", layout="wide")
 
-# ---------------------------
-# CONEXIÓN
-# ---------------------------
+# --------------------------------
+# CONEXIÓN BD
+# --------------------------------
 def conectar():
     return psycopg2.connect(
         host=st.secrets["DB_HOST"],
@@ -19,60 +22,51 @@ def conectar():
         port=st.secrets["DB_PORT"]
     )
 
-# ---------------------------
+# --------------------------------
 # LOGIN
-# ---------------------------
-def verificar_usuario(usuario, password):
+# --------------------------------
+if "usuario" not in st.session_state:
+    st.session_state.usuario = None
+
+def login(usuario, password):
     conn = conectar()
     cur = conn.cursor()
     cur.execute(
-        "SELECT id, rol FROM usuarios WHERE usuario=%s AND password=%s",
+        "SELECT usuario, rol FROM usuarios WHERE usuario=%s AND password=%s",
         (usuario, password)
     )
     user = cur.fetchone()
     conn.close()
     return user
 
-if "usuario_id" not in st.session_state:
-    st.session_state.usuario_id = None
-    st.session_state.rol = None
-
-if st.session_state.usuario_id is None:
+if not st.session_state.usuario:
     st.title("🔐 Iniciar Sesión")
-    usuario = st.text_input("Usuario")
-    password = st.text_input("Contraseña", type="password")
+
+    user_input = st.text_input("Usuario")
+    pass_input = st.text_input("Contraseña", type="password")
 
     if st.button("Ingresar"):
-        user = verificar_usuario(usuario, password)
+        user = login(user_input, pass_input)
         if user:
-            st.session_state.usuario_id = user[0]
+            st.session_state.usuario = user[0]
             st.session_state.rol = user[1]
             st.rerun()
         else:
             st.error("Credenciales incorrectas")
+
     st.stop()
 
-# ---------------------------
+# --------------------------------
 # FUNCIONES BD
-# ---------------------------
+# --------------------------------
 def obtener_ventas():
     conn = conectar()
     cur = conn.cursor()
-
-    if st.session_state.rol == "admin":
-        cur.execute("""
-            SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
-            FROM ventas
-            ORDER BY fecha DESC
-        """)
-    else:
-        cur.execute("""
-            SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
-            FROM ventas
-            WHERE usuario_id=%s
-            ORDER BY fecha DESC
-        """, (st.session_state.usuario_id,))
-
+    cur.execute("""
+        SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
+        FROM ventas
+        ORDER BY fecha DESC
+    """)
     rows = cur.fetchall()
     conn.close()
 
@@ -87,33 +81,120 @@ def obtener_ventas():
             "Pagado": float(r[5]),
             "Saldo": float(r[6]),
             "Estado": r[7],
-            "Método": r[8],
+            "Método de pago": r[8],
             "Entrega": r[9]
         })
     return ventas
 
-# ---------------------------
+def registrar_venta(venta):
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO ventas 
+        (fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """, (
+        datetime.now(),
+        venta["Cliente"],
+        venta["Producto"],
+        venta["Total"],
+        venta["Pagado"],
+        venta["Saldo"],
+        venta["Estado"],
+        venta["Método de pago"],
+        venta["Entrega"]
+    ))
+    conn.commit()
+    conn.close()
+    st.success("✅ Venta registrada correctamente")
+    st.rerun()
+
+def completar_pago(id_venta, total):
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE ventas
+        SET pagado=%s, saldo=0, estado='Pagado'
+        WHERE id=%s
+    """, (total, id_venta))
+    conn.commit()
+    conn.close()
+    st.rerun()
+
+def eliminar_venta(id_venta):
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM ventas WHERE id=%s", (id_venta,))
+    conn.commit()
+    conn.close()
+    st.rerun()
+
+def marcar_entrega(id_venta, estado):
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("UPDATE ventas SET entrega=%s WHERE id=%s", (estado, id_venta))
+    conn.commit()
+    conn.close()
+    st.rerun()
+
+# --------------------------------
 # INTERFAZ
-# ---------------------------
-st.sidebar.write(f"Usuario: {st.session_state.rol}")
+# --------------------------------
+st.sidebar.write(f"Usuario: {st.session_state.usuario}")
 if st.sidebar.button("Cerrar sesión"):
-    st.session_state.usuario_id = None
+    st.session_state.usuario = None
     st.rerun()
 
 st.title("Sistema Comercial - NSJ CAPROYECT")
+st.divider()
 
-tab1, tab2, tab3 = st.tabs(["📊 Ventas", "📈 Estadísticas", "📄 Reporte Profesional"])
+METODOS_PAGO = ["Efectivo", "Yape", "Plin", "Transferencia"]
 
-ventas = obtener_ventas()
+tab_venta, tab_ventas, tab_estadisticas, tab_reporte = st.tabs(
+    ["➕ Nueva Venta", "📊 Ventas", "📈 Estadísticas", "📄 Reporte Profesional"]
+)
 
-# =====================================================
-# 📊 VENTAS
-# =====================================================
-with tab1:
+# ======================================
+# NUEVA VENTA
+# ======================================
+with tab_venta:
+    cliente = st.text_input("Cliente")
+    producto = st.text_input("Producto")
+    total = st.number_input("Total", min_value=0.0)
+    metodo_pago = st.selectbox("Método de pago", METODOS_PAGO)
+    tipo_pago = st.radio("Tipo de pago", ["Pago completo", "Adelanto"])
 
-    if not ventas:
-        st.warning("No hay ventas registradas")
+    if tipo_pago == "Pago completo":
+        pagado = total
+        saldo = 0
+        estado = "Pagado"
     else:
+        adelanto = st.number_input("Monto adelanto", min_value=0.0)
+        pagado = adelanto
+        saldo = total - adelanto
+        estado = "Pendiente" if saldo > 0 else "Pagado"
+
+    entrega = st.selectbox("Estado de entrega", ["Pendiente", "Entregado"])
+
+    if st.button("Registrar venta"):
+        registrar_venta({
+            "Cliente": cliente,
+            "Producto": producto,
+            "Total": total,
+            "Pagado": pagado,
+            "Saldo": saldo,
+            "Estado": estado,
+            "Método de pago": metodo_pago,
+            "Entrega": entrega
+        })
+
+# ======================================
+# VENTAS
+# ======================================
+with tab_ventas:
+    ventas = obtener_ventas()
+
+    if ventas:
         total_vendido = sum(v["Total"] for v in ventas)
         total_cobrado = sum(v["Pagado"] for v in ventas)
         total_pendiente = sum(v["Saldo"] for v in ventas)
@@ -127,82 +208,70 @@ with tab1:
             with st.container(border=True):
                 st.write(f"Cliente: {v['Cliente']}")
                 st.write(f"Producto: {v['Producto']}")
-                st.write(f"Método: {v['Método']}")
+                st.write(f"Método: {v['Método de pago']}")
                 st.write(f"Entrega: {v['Entrega']}")
 
-# =====================================================
-# 📈 ESTADÍSTICAS
-# =====================================================
-with tab2:
+                colA, colB, colC = st.columns(3)
+
+                if v["Estado"] == "Pendiente":
+                    if colA.button("Completar pago", key=f"p_{v['id']}"):
+                        completar_pago(v["id"], v["Total"])
+
+                if colB.button("Eliminar", key=f"d_{v['id']}"):
+                    eliminar_venta(v["id"])
+
+                nuevo = "Entregado" if v["Entrega"] == "Pendiente" else "Pendiente"
+                if colC.button(f"Marcar {nuevo}", key=f"e_{v['id']}"):
+                    marcar_entrega(v["id"], nuevo)
+
+# ======================================
+# ESTADÍSTICAS
+# ======================================
+with tab_estadisticas:
+    ventas = obtener_ventas()
 
     if ventas:
         metodos = {}
         for v in ventas:
-            metodos[v["Método"]] = metodos.get(v["Método"], 0) + v["Pagado"]
+            metodos[v["Método de pago"]] = metodos.get(v["Método de pago"], 0) + v["Pagado"]
 
-        st.subheader("Ingresos por Método de Pago")
+        st.subheader("Métodos de pago más usados")
 
-        for metodo, total in metodos.items():
-            st.metric(metodo, f"S/. {total:.2f}")
+        for metodo, monto in metodos.items():
+            st.write(f"{metodo}: S/. {monto:.2f}")
 
-        st.subheader("Resumen General")
+# ======================================
+# REPORTE PROFESIONAL
+# ======================================
+with tab_reporte:
+    ventas = obtener_ventas()
 
-        ganancia_total = sum(v["Pagado"] for v in ventas)
-        st.success(f"💰 Ganancia Total: S/. {ganancia_total:.2f}")
-
-# =====================================================
-# 📄 REPORTE PROFESIONAL
-# =====================================================
-with tab3:
-
-    if st.button("Generar Reporte Profesional PDF"):
-
-        nombre_pdf = "reporte_profesional.pdf"
+    if st.button("Generar PDF Profesional"):
+        nombre_pdf = f"reporte_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
         doc = SimpleDocTemplate(nombre_pdf)
         elementos = []
         estilos = getSampleStyleSheet()
 
-        elementos.append(Paragraph("<b>NSJ CAPROYECT</b>", estilos["Title"]))
-        elementos.append(Spacer(1, 12))
-        elementos.append(Paragraph("Reporte General de Ventas", estilos["Heading2"]))
+        elementos.append(Paragraph("<b>REPORTE PROFESIONAL DE VENTAS</b>", estilos["Title"]))
         elementos.append(Spacer(1, 20))
-
-        data = [["Cliente", "Producto", "Total", "Pagado", "Método"]]
-
-        for v in ventas:
-            data.append([
-                v["Cliente"],
-                v["Producto"],
-                f"S/. {v['Total']}",
-                f"S/. {v['Pagado']}",
-                v["Método"]
-            ])
-
-        tabla = Table(data, repeatRows=1)
-        tabla.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.black),
-            ('TEXTCOLOR',(0,0),(-1,0),colors.white),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-        ]))
-
-        elementos.append(tabla)
-        elementos.append(Spacer(1, 30))
 
         total_vendido = sum(v["Total"] for v in ventas)
         total_cobrado = sum(v["Pagado"] for v in ventas)
-
-        elementos.append(Paragraph(f"<b>Total Vendido:</b> S/. {total_vendido:.2f}", estilos["Normal"]))
-        elementos.append(Paragraph(f"<b>Total Cobrado (Ganancia):</b> S/. {total_cobrado:.2f}", estilos["Normal"]))
-        elementos.append(Spacer(1, 15))
-
-        elementos.append(Paragraph("<b>Ingresos por Método de Pago:</b>", estilos["Heading3"]))
+        total_pendiente = sum(v["Saldo"] for v in ventas)
 
         metodos = {}
         for v in ventas:
-            metodos[v["Método"]] = metodos.get(v["Método"], 0) + v["Pagado"]
+            metodos[v["Método de pago"]] = metodos.get(v["Método de pago"], 0) + v["Pagado"]
 
-        for metodo, total in metodos.items():
-            elementos.append(Paragraph(f"{metodo}: S/. {total:.2f}", estilos["Normal"]))
+        elementos.append(Paragraph(f"Total Vendido: S/. {total_vendido:.2f}", estilos["Normal"]))
+        elementos.append(Paragraph(f"Total Cobrado: S/. {total_cobrado:.2f}", estilos["Normal"]))
+        elementos.append(Paragraph(f"Total Pendiente: S/. {total_pendiente:.2f}", estilos["Normal"]))
+        elementos.append(Spacer(1, 15))
+
+        elementos.append(Paragraph("<b>Resumen por Método de Pago:</b>", estilos["Heading2"]))
+
+        for metodo, monto in metodos.items():
+            elementos.append(Paragraph(f"{metodo}: S/. {monto:.2f}", estilos["Normal"]))
 
         doc.build(elementos)
 
