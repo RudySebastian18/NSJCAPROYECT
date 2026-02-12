@@ -418,7 +418,14 @@ with tab_reporte:
 
             elementos.append(tabla)
 
-                st.divider()
+            # -------------------------
+            # GENERAR
+            # -------------------------
+            doc.build(elementos)
+
+            with open(nombre_pdf, "rb") as f:
+                st.download_button("Descargar PDF", f, nombre_pdf)
+             st.divider()
                 st.subheader("🔒 Cierre de Caja")
                 
                 if st.button("Realizar Cierre de Caja"):
@@ -450,11 +457,3 @@ with tab_reporte:
                     st.info("No hay cierres registrados aún.")
 
 
-            # -------------------------
-            # GENERAR
-            # -------------------------
-            doc.build(elementos)
-
-            with open(nombre_pdf, "rb") as f:
-                st.download_button("Descargar PDF", f, nombre_pdf)
-            
