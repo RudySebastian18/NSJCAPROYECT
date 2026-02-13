@@ -22,39 +22,6 @@ def conectar():
         port=st.secrets["DB_PORT"]
     )
 
-# --------------------------------
-# LOGIN
-# --------------------------------
-if "usuario" not in st.session_state:
-    st.session_state.usuario = None
-
-def login(usuario, password):
-    conn = conectar()
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT usuario, rol FROM usuarios WHERE usuario=%s AND password=%s",
-        (usuario, password)
-    )
-    user = cur.fetchone()
-    conn.close()
-    return user
-
-if not st.session_state.usuario:
-    st.title("🔐 Iniciar Sesión")
-
-    user_input = st.text_input("Usuario")
-    pass_input = st.text_input("Contraseña", type="password")
-
-    if st.button("Ingresar"):
-        user = login(user_input, pass_input)
-        if user:
-            st.session_state.usuario = user[0]
-            st.session_state.rol = user[1]
-            st.rerun()
-        else:
-            st.error("Credenciales incorrectas")
-
-    st.stop()
 
 # --------------------------------
 # FUNCIONES BD
@@ -333,7 +300,7 @@ with tab_reporte:
     st.subheader("🔒 Cierre de Caja")
 
     if st.button("Realizar Cierre de Caja"):
-        resultado = cierre_de_caja(st.session_state.usuario)
+        resultado = cierre_de_caja("Admin")
 
         if resultado:
             st.success("✅ Cierre realizado correctamente")
