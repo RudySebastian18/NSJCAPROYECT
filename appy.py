@@ -1,10 +1,15 @@
 import streamlit as st
 import psycopg2
 from datetime import datetime
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from zoneinfo import ZoneInfo
+from io import BytesIO
+import os  # 👈 AGREGA ESTA LÍNEA
+
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
-from zoneinfo import ZoneInfo
+from reportlab.lib.units import inch
+
 
 # --------------------------------
 # CONFIG
