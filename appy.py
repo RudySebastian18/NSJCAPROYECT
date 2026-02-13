@@ -258,23 +258,34 @@ with tab_ventas:
 
         for v in ventas:
             with st.container(border=True):
-                st.write(f"Cliente: {v['Cliente']}")
-                st.write(f"Producto: {v['Producto']}")
-                st.write(f"Método: {v['Método de pago']}")
-                st.write(f"Entrega: {v['Entrega']}")
 
-                colA, colB, colC = st.columns(3)
-
-                if v["Estado"] == "Pendiente":
-                    if colA.button("Completar pago", key=f"p_{v['id']}"):
-                        completar_pago(v["id"], v["Total"])
-
-                if colB.button("Eliminar", key=f"d_{v['id']}"):
-                    eliminar_venta(v["id"])
-
-                nuevo = "Entregado" if v["Entrega"] == "Pendiente" else "Pendiente"
-                if colC.button(f"Marcar {nuevo}", key=f"e_{v['id']}"):
-                    marcar_entrega(v["id"], nuevo)
+                st.markdown(f"### 🧾 Pedido #{v['id']}")
+        
+                col1, col2 = st.columns(2)
+        
+                with col1:
+                    st.write(f"👤 Cliente: {v['Cliente']}")
+                    st.write(f"📦 Producto: {v['Producto']}")
+                    st.write(f"💳 Método de pago: {v['Método de pago']}")
+        
+                with col2:
+                    st.write(f"💰 Total: S/. {v['Total']:.2f}")
+                    st.write(f"💵 Pagado: S/. {v['Pagado']:.2f}")
+                    st.write(f"🧾 Saldo: S/. {v['Saldo']:.2f}")
+        
+                # Estado de pago visual
+                if v["Saldo"] > 0:
+                    st.warning(f"⚠️ Adelanto recibido. Falta pagar: S/. {v['Saldo']:.2f}")
+                else:
+                    st.success("✅ Pagado completamente")
+        
+                # Estado de entrega
+                if v["Entrega"] == "Pendiente":
+                    st.info("🚚 Entrega pendiente")
+                else:
+                    st.success("📦 Pedido entregado")
+        
+                st.divider()
 
 # ======================================
 # ESTADÍSTICAS
