@@ -188,10 +188,6 @@ def obtener_cierres():
 # --------------------------------
 # INTERFAZ
 # --------------------------------
-st.sidebar.write(f"Usuario: {st.session_state.usuario}")
-if st.sidebar.button("Cerrar sesión"):
-    st.session_state.usuario = None
-    st.rerun()
 
 st.title("Sistema Comercial - NSJ CAPROYECT")
 st.divider()
