@@ -428,10 +428,6 @@ if st.button("Generar PDF"):
     # PIE DE PÁGINA
     # ==========================
     elementos.append(Spacer(1, 30))
-    elementos.append(Paragraph(
-        "Documento generado automáticamente por el Sistema Comercial NSJ CAPROYECT",
-        estilos["Normal"]
-    ))
 
     # Construir PDF
     doc.build(elementos)
@@ -446,7 +442,7 @@ if st.button("Generar PDF"):
     )
 
 # ======================================
-# REPORTE PROFESIONAL
+# CIERRE DE CAJA
 # ======================================
 with tab_reporte:
 
