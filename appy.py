@@ -435,7 +435,7 @@ if st.button("Generar PDF"):
     buffer.seek(0)
 
     st.download_button(
-        "Descargar Reporte Profesional",
+        "Descargar Reporte ",
         buffer,
         "reporte_ventas_profesional.pdf",
         "application/pdf"
