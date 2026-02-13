@@ -66,13 +66,12 @@ def obtener_ventas():
 def registrar_venta(venta):
     conn = conectar()
     cur = conn.cursor()
-    fecha = hora_peru()
+
     cur.execute("""
-        INSERT INTO ventas 
+        INSERT INTO ventas
         (cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """, (
-        hora_peru(),
         venta["Cliente"],
         venta["Producto"],
         venta["Total"],
@@ -82,10 +81,12 @@ def registrar_venta(venta):
         venta["Método de pago"],
         venta["Entrega"]
     ))
+
     conn.commit()
     conn.close()
     st.success("✅ Venta registrada correctamente")
     st.rerun()
+
 
 def completar_pago(id_venta, total):
     conn = conectar()
