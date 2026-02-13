@@ -4,6 +4,7 @@ from datetime import datetime
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
+from zoneinfo import ZoneInfo
 
 # --------------------------------
 # CONFIG
@@ -63,7 +64,7 @@ def registrar_venta(venta):
         (fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
     """, (
-        datetime.now(),
+        hora_peru(),
         venta["Cliente"],
         venta["Producto"],
         venta["Total"],
@@ -105,6 +106,8 @@ def marcar_entrega(id_venta, estado):
     conn.commit()
     conn.close()
     st.rerun()
+def hora_peru():
+    return datetime.now(ZoneInfo("America/Lima"))
     
 def cierre_de_caja(usuario_actual):
     conn = conectar()
@@ -149,7 +152,7 @@ def cierre_de_caja(usuario_actual):
         (fecha, total_general, total_efectivo, total_yape, total_plin, total_transferencia, usuario)
         VALUES (%s, %s, %s, %s, %s, %s, %s)
     """, (
-        datetime.now().date(),
+        hora_peru().date()
         total_general,
         totales_metodo["Efectivo"],
         totales_metodo["Yape"],
@@ -332,14 +335,14 @@ with tab_reporte:
     else:
         if st.button("Generar PDF"):
 
-            nombre_pdf = f"reporte_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+            nombre_pdf = f"reporte_{hora_peru().strftime('%d/%m/%Y %H:%M')}.pdf"
             doc = SimpleDocTemplate(nombre_pdf)
             elementos = []
             estilos = getSampleStyleSheet()
 
             elementos.append(Paragraph("<b>SISTEMA COMERCIAL - NSJ CAPROYECT</b>", estilos["Title"]))
             elementos.append(Spacer(1, 10))
-            elementos.append(Paragraph(f"Fecha de emisión: {datetime.now().strftime('%d/%m/%Y %H:%M')}", estilos["Normal"]))
+            elementos.append(Paragraph(f"Fecha de emisión: {hora_peru().strftime('%d/%m/%Y %H:%M')}", estilos["Normal"]))
             elementos.append(Spacer(1, 20))
 
             total_vendido = sum(v["Total"] for v in ventas)
