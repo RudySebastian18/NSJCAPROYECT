@@ -64,6 +64,7 @@ def obtener_ventas():
 def registrar_venta(venta):
     conn = conectar()
     cur = conn.cursor()
+    fecha = hora_peru()
     cur.execute("""
         INSERT INTO ventas 
         (fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega)
@@ -258,9 +259,11 @@ with tab_ventas:
 
         for v in ventas:
             with st.container(border=True):
-
+        
                 st.markdown(f"### 🧾 Pedido #{v['id']}")
         
+                st.write(f"📅 Fecha: {v['Fecha'].strftime('%d/%m/%Y %H:%M')}")
+                
                 col1, col2 = st.columns(2)
         
                 with col1:
@@ -273,7 +276,7 @@ with tab_ventas:
                     st.write(f"💵 Pagado: S/. {v['Pagado']:.2f}")
                     st.write(f"🧾 Saldo: S/. {v['Saldo']:.2f}")
         
-                # Estado de pago visual
+                # Estado de pago
                 if v["Saldo"] > 0:
                     st.warning(f"⚠️ Adelanto recibido. Falta pagar: S/. {v['Saldo']:.2f}")
                 else:
@@ -285,7 +288,27 @@ with tab_ventas:
                 else:
                     st.success("📦 Pedido entregado")
         
+                # -----------------------------
+                # BOTONES DE ACCIÓN
+                # -----------------------------
+                colA, colB, colC = st.columns(3)
+        
+                # Completar pago
+                if v["Saldo"] > 0:
+                    if colA.button("💵 Completar pago", key=f"pago_{v['id']}"):
+                        completar_pago(v["id"], v["Total"])
+        
+                # Marcar entrega
+                nuevo_estado = "Entregado" if v["Entrega"] == "Pendiente" else "Pendiente"
+                if colB.button(f"🚚 Marcar {nuevo_estado}", key=f"ent_{v['id']}"):
+                    marcar_entrega(v["id"], nuevo_estado)
+        
+                # Eliminar
+                if colC.button("🗑 Eliminar", key=f"del_{v['id']}"):
+                    eliminar_venta(v["id"])
+        
                 st.divider()
+
 
 # ======================================
 # ESTADÍSTICAS
