@@ -152,7 +152,7 @@ def cierre_de_caja(usuario_actual):
         (fecha, total_general, total_efectivo, total_yape, total_plin, total_transferencia, usuario)
         VALUES (%s, %s, %s, %s, %s, %s, %s)
     """, (
-        hora_peru().date()
+        hora_peru().date(),
         total_general,
         totales_metodo["Efectivo"],
         totales_metodo["Yape"],
