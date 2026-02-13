@@ -47,9 +47,11 @@ def obtener_ventas():
 
     ventas = []
     for r in rows:
+        from zoneinfo import ZoneInfo
+        fecha_peru = r[1].astimezone(ZoneInfo("America/Lima"))
         ventas.append({
             "id": r[0],
-            "Fecha": r[1],
+            "Fecha": fecha_peru,
             "Cliente": r[2],
             "Producto": r[3],
             "Total": float(r[4]),
@@ -67,7 +69,7 @@ def registrar_venta(venta):
     fecha = hora_peru()
     cur.execute("""
         INSERT INTO ventas 
-        (fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega)
+        (cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
     """, (
         hora_peru(),
