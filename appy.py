@@ -67,10 +67,12 @@ def registrar_venta(venta):
     conn = conectar()
     cur = conn.cursor()
 
+    # Insertar venta y obtener ID
     cur.execute("""
         INSERT INTO ventas
         (cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
     """, (
         venta["Cliente"],
         venta["Producto"],
@@ -82,10 +84,25 @@ def registrar_venta(venta):
         venta["Entrega"]
     ))
 
+    venta_id = cur.fetchone()[0]
+
+    # 🔥 REGISTRAR PAGO REAL SOLO SI SE PAGÓ ALGO
+    if venta["Pagado"] > 0:
+        cur.execute("""
+            INSERT INTO pagos (venta_id, fecha, monto, metodo)
+            VALUES (%s, NOW(), %s, %s)
+        """, (
+            venta_id,
+            venta["Pagado"],
+            venta["Método de pago"]
+        ))
+
     conn.commit()
     conn.close()
+
     st.success("✅ Venta registrada correctamente")
     st.rerun()
+
 
 
 def completar_pago(id_venta, total):
@@ -251,9 +268,29 @@ with tab_ventas:
     ventas = obtener_ventas()
 
     if ventas:
+        from datetime import datetime
+        import pytz
+        
+        peru = pytz.timezone("America/Lima")
+        hoy = datetime.now(peru).date()
+        
         total_vendido = sum(v["Total"] for v in ventas)
-        total_cobrado = sum(v["Pagado"] for v in ventas)
         total_pendiente = sum(v["Saldo"] for v in ventas)
+        
+        # 🔹 NUEVO: total cobrado real desde tabla pagos
+        conn = conectar()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT COALESCE(SUM(monto),0)
+            FROM pagos
+            WHERE DATE(fecha) = %s
+        """, (hoy,))
+        
+        total_cobrado = cur.fetchone()[0]
+        
+        conn.close()
+
 
         col1, col2, col3 = st.columns(3)
         col1.metric("Total Vendido", f"S/. {total_vendido:.2f}")
@@ -317,17 +354,37 @@ with tab_ventas:
 # ESTADÍSTICAS
 # ======================================
 with tab_estadisticas:
-    ventas = obtener_ventas()
 
-    if ventas:
-        metodos = {}
-        for v in ventas:
-            metodos[v["Método de pago"]] = metodos.get(v["Método de pago"], 0) + v["Pagado"]
+    from datetime import datetime
+    import pytz
 
-        st.subheader("Métodos de pago más usados")
+    peru = pytz.timezone("America/Lima")
+    hoy = datetime.now(peru).date()
 
-        for metodo, monto in metodos.items():
-            st.write(f"{metodo}: S/. {monto:.2f}")
+    conn = conectar()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT metodo, COUNT(*), COALESCE(SUM(monto),0)
+        FROM pagos
+        WHERE DATE(fecha) = %s
+        GROUP BY metodo
+        ORDER BY SUM(monto) DESC
+    """, (hoy,))
+
+    resultados = cur.fetchall()
+    conn.close()
+
+    st.subheader("📊 Métodos de pago más usados (Hoy)")
+
+    if resultados:
+        for metodo, cantidad, total in resultados:
+            st.write(f"💳 {metodo}")
+            st.write(f"   • Cantidad de pagos: {cantidad}")
+            st.write(f"   • Total recibido: S/. {total:.2f}")
+            st.divider()
+    else:
+        st.info("No hay pagos registrados hoy.")
 
 # ======================================
 # REPORTE PROFESIONAL
