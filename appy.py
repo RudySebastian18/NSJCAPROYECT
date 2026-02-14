@@ -539,6 +539,39 @@ with tab_estadisticas:
 # CIERRE DE CAJA
 # ======================================
 with tab_reporte:
+    
+    st.divider()
+    st.subheader("🔒 Cierre de Caja")
+
+    if st.button("Realizar Cierre de Caja"):
+        resultado = cierre_de_caja("Admin")
+
+        if resultado:
+            st.success("✅ Cierre realizado correctamente")
+            st.rerun()
+        else:
+            st.warning("No hay ventas entregadas y pagadas para cerrar")
+
+    st.divider()
+    st.subheader("📜 Historial de Cierres")
+
+    cierres = obtener_cierres()
+
+    if cierres:
+        for c in cierres:
+            with st.container(border=True):
+                st.write(f"📅 Fecha: {c[0]}")
+                st.write(f"💰 Total General: S/. {c[1]}")
+                st.write(f"Efectivo: S/. {c[2]}")
+                st.write(f"Yape: S/. {c[3]}")
+                st.write(f"Plin: S/. {c[4]}")
+                st.write(f"Transferencia: S/. {c[5]}")
+                st.write(f"👤 Usuario: {c[6]}")
+                st.write(f"🕒 Registrado: {c[7]}")
+    else:
+        st.info("No hay cierres registrados aún.")
+
+    st.divider()
     from io import BytesIO
     from reportlab.platypus import Image
     from reportlab.lib.units import inch
@@ -684,36 +717,3 @@ with tab_reporte:
             "reporte_ventas_profesional.pdf",
             "application/pdf"
         )
-    st.divider()
-    st.subheader("🔒 Cierre de Caja")
-
-    if st.button("Realizar Cierre de Caja"):
-        resultado = cierre_de_caja("Admin")
-
-        if resultado:
-            st.success("✅ Cierre realizado correctamente")
-            st.rerun()
-        else:
-            st.warning("No hay ventas entregadas y pagadas para cerrar")
-
-    st.divider()
-    st.subheader("📜 Historial de Cierres")
-
-    cierres = obtener_cierres()
-
-    if cierres:
-        for c in cierres:
-            with st.container(border=True):
-                st.write(f"📅 Fecha: {c[0]}")
-                st.write(f"💰 Total General: S/. {c[1]}")
-                st.write(f"Efectivo: S/. {c[2]}")
-                st.write(f"Yape: S/. {c[3]}")
-                st.write(f"Plin: S/. {c[4]}")
-                st.write(f"Transferencia: S/. {c[5]}")
-                st.write(f"👤 Usuario: {c[6]}")
-                st.write(f"🕒 Registrado: {c[7]}")
-    else:
-        st.info("No hay cierres registrados aún.")
-
-    st.divider()
-
