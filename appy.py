@@ -539,7 +539,110 @@ with tab_estadisticas:
 # CIERRE DE CAJA
 # ======================================
 with tab_reporte:
-    
+
+    ventas = obtener_ventas()
+
+    # =====================================================
+    # 📄 REPORTE PROFESIONAL PDF (PRIMERO)
+    # =====================================================
+    st.subheader("📄 Reporte Profesional")
+
+    if not ventas:
+        st.warning("No hay ventas para generar reporte")
+    else:
+        from io import BytesIO
+        from reportlab.platypus import Image
+        from reportlab.lib.units import inch
+
+        if st.button("Generar PDF"):
+
+            buffer = BytesIO()
+            doc = SimpleDocTemplate(buffer)
+            elementos = []
+            estilos = getSampleStyleSheet()
+
+            # LOGO
+            if os.path.exists("logo.png"):
+                logo = Image("logo.png", width=2*inch, height=1*inch)
+                elementos.append(logo)
+
+            elementos.append(Spacer(1, 10))
+
+            # ENCABEZADO
+            elementos.append(Paragraph("<b>SISTEMA COMERCIAL</b>", estilos["Title"]))
+            elementos.append(Paragraph("<b>NSJ CAPROYECT</b>", estilos["Heading2"]))
+            elementos.append(Spacer(1, 5))
+            elementos.append(Paragraph(
+                f"Fecha de emisión: {hora_peru().strftime('%d/%m/%Y %H:%M')}",
+                estilos["Normal"]
+            ))
+            elementos.append(Spacer(1, 20))
+
+            # TOTALES
+            total_vendido = sum(v["Total"] for v in ventas)
+            total_cobrado = sum(v["Pagado"] for v in ventas)
+            total_pendiente = sum(v["Saldo"] for v in ventas)
+
+            resumen_data = [
+                ["Total Vendido", f"S/. {total_vendido:.2f}"],
+                ["Total Cobrado", f"S/. {total_cobrado:.2f}"],
+                ["Total Pendiente", f"S/. {total_pendiente:.2f}"],
+            ]
+
+            tabla_resumen = Table(resumen_data, colWidths=[250, 150])
+            tabla_resumen.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.lightgrey),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ]))
+
+            elementos.append(tabla_resumen)
+            elementos.append(Spacer(1, 20))
+
+            # DETALLE
+            data = [[
+                "Fecha", "Cliente", "Producto",
+                "Total", "Pagado", "Saldo",
+                "Estado", "Método", "Entrega"
+            ]]
+
+            for v in ventas:
+                data.append([
+                    str(v["Fecha"]),
+                    v["Cliente"],
+                    v["Producto"],
+                    f"S/. {v['Total']:.2f}",
+                    f"S/. {v['Pagado']:.2f}",
+                    f"S/. {v['Saldo']:.2f}",
+                    v["Estado"],
+                    v["Método de pago"],
+                    v["Entrega"]
+                ])
+
+            tabla = Table(data, repeatRows=1)
+            tabla.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                ('FONTSIZE', (0, 0), (-1, -1), 7),
+                ('ALIGN', (3, 1), (5, -1), 'RIGHT'),
+            ]))
+
+            elementos.append(tabla)
+
+            doc.build(elementos)
+            buffer.seek(0)
+
+            st.download_button(
+                "Descargar Reporte",
+                buffer,
+                "reporte_ventas_profesional.pdf",
+                "application/pdf"
+            )
+
+    # =====================================================
+    # 🔒 CIERRE DE CAJA (SEGUNDO)
+    # =====================================================
     st.divider()
     st.subheader("🔒 Cierre de Caja")
 
@@ -552,6 +655,9 @@ with tab_reporte:
         else:
             st.warning("No hay ventas entregadas y pagadas para cerrar")
 
+    # =====================================================
+    # 📜 HISTORIAL (TERCERO)
+    # =====================================================
     st.divider()
     st.subheader("📜 Historial de Cierres")
 
@@ -570,150 +676,3 @@ with tab_reporte:
                 st.write(f"🕒 Registrado: {c[7]}")
     else:
         st.info("No hay cierres registrados aún.")
-
-    st.divider()
-    from io import BytesIO
-    from reportlab.platypus import Image
-    from reportlab.lib.units import inch
-    
-    if st.button("Generar PDF"):
-    
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer)
-        elementos = []
-        estilos = getSampleStyleSheet()
-    
-        # ==========================
-        # LOGO
-        # ==========================
-        if os.path.exists("logo.png"):
-            logo = Image("logo.png", width=2*inch, height=1*inch)
-            elementos.append(logo)
-    
-        elementos.append(Spacer(1, 10))
-    
-        # ==========================
-        # ENCABEZADO
-        # ==========================
-        elementos.append(Paragraph("<b>SISTEMA COMERCIAL</b>", estilos["Title"]))
-        elementos.append(Paragraph("<b>NSJ CAPROYECT</b>", estilos["Heading2"]))
-        elementos.append(Spacer(1, 5))
-        elementos.append(Paragraph(
-            f"Fecha de emisión: {hora_peru().strftime('%d/%m/%Y %H:%M')}",
-            estilos["Normal"]
-        ))
-        elementos.append(Spacer(1, 20))
-    
-        # ==========================
-        # TOTALES GENERALES
-        # ==========================
-        total_vendido = sum(v["Total"] for v in ventas)
-        total_cobrado = sum(v["Pagado"] for v in ventas)
-        total_pendiente = sum(v["Saldo"] for v in ventas)
-    
-        elementos.append(Paragraph("<b>RESUMEN GENERAL</b>", estilos["Heading2"]))
-        elementos.append(Spacer(1, 10))
-    
-        resumen_data = [
-            ["Total Vendido", f"S/. {total_vendido:.2f}"],
-            ["Total Cobrado (Ganancia Real)", f"S/. {total_cobrado:.2f}"],
-            ["Total Pendiente", f"S/. {total_pendiente:.2f}"],
-        ]
-    
-        tabla_resumen = Table(resumen_data, colWidths=[250, 150])
-        tabla_resumen.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), colors.lightgrey),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('FONTSIZE', (0, 0), (-1, -1), 11),
-            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-        ]))
-    
-        elementos.append(tabla_resumen)
-        elementos.append(Spacer(1, 20))
-    
-        # ==========================
-        # RESUMEN MÉTODOS DE PAGO
-        # ==========================
-        elementos.append(Paragraph("<b>RESUMEN POR MÉTODO DE PAGO</b>", estilos["Heading2"]))
-        elementos.append(Spacer(1, 10))
-    
-        metodos = {}
-        for v in ventas:
-            metodos[v["Método de pago"]] = metodos.get(v["Método de pago"], 0) + v["Pagado"]
-    
-        data_metodos = [["Método", "Monto Recibido"]]
-    
-        for metodo, monto in metodos.items():
-            data_metodos.append([metodo, f"S/. {monto:.2f}"])
-    
-        tabla_metodos = Table(data_metodos, repeatRows=1, colWidths=[200, 150])
-        tabla_metodos.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('ALIGN', (1, 1), (1, -1), 'RIGHT'),
-            ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ]))
-    
-        elementos.append(tabla_metodos)
-        elementos.append(Spacer(1, 25))
-    
-        # ==========================
-        # DETALLE COMPLETO DE VENTAS
-        # ==========================
-        elementos.append(Paragraph("<b>DETALLE COMPLETO DE VENTAS</b>", estilos["Heading2"]))
-        elementos.append(Spacer(1, 10))
-    
-        data = [[
-            "Fecha",
-            "Cliente",
-            "Producto",
-            "Total",
-            "Pagado",
-            "Saldo",
-            "Estado",
-            "Método",
-            "Entrega"
-        ]]
-    
-        for v in ventas:
-            data.append([
-                str(v["Fecha"]),
-                v["Cliente"],
-                v["Producto"],
-                f"S/. {v['Total']:.2f}",
-                f"S/. {v['Pagado']:.2f}",
-                f"S/. {v['Saldo']:.2f}",
-                v["Estado"],
-                v["Método de pago"],
-                v["Entrega"]
-            ])
-    
-        tabla = Table(data, repeatRows=1)
-    
-        tabla.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('FONTSIZE', (0, 0), (-1, -1), 7),
-            ('ALIGN', (3, 1), (5, -1), 'RIGHT'),
-        ]))
-    
-        elementos.append(tabla)
-    
-        # ==========================
-        # PIE DE PÁGINA
-        # ==========================
-        elementos.append(Spacer(1, 30))
-    
-        # Construir PDF
-        doc.build(elementos)
-    
-        buffer.seek(0)
-    
-        st.download_button(
-            "Descargar Reporte ",
-            buffer,
-            "reporte_ventas_profesional.pdf",
-            "application/pdf"
-        )
