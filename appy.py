@@ -225,19 +225,44 @@ def obtener_cierres():
     conn.close()
     return data
 
+def total_vendido_hoy():
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT COALESCE(SUM(total),0)
+        FROM ventas
+        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+    """)
+    total = cur.fetchone()[0]
+    conn.close()
+    return total
+
+
 def total_cobrado_hoy():
     conn = conectar()
     cur = conn.cursor()
-
     cur.execute("""
         SELECT COALESCE(SUM(monto),0)
         FROM pagos
         WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
     """)
-
     total = cur.fetchone()[0]
     conn.close()
-    return float(total)
+    return total
+
+
+def total_pendiente_hoy():
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT COALESCE(SUM(saldo),0)
+        FROM ventas
+        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+    """)
+    total = cur.fetchone()[0]
+    conn.close()
+    return total
+
 
 # --------------------------------
 # INTERFAZ
@@ -299,8 +324,8 @@ with tab_ventas:
         peru = pytz.timezone("America/Lima")
         hoy = datetime.now(peru).date()
         
-        total_vendido = sum(v["Total"] for v in ventas)
-        total_pendiente = sum(v["Saldo"] for v in ventas)
+        total_vendido = total_vendido_hoy()
+        total_pendiente = total_pendiente_hoy()
         
         # 🔹 NUEVO: total cobrado real desde tabla pagos
         conn = conectar()
@@ -456,9 +481,10 @@ with tab_reporte:
             elementos.append(Spacer(1, 20))
 
             # TOTALES
-            total_vendido = sum(v["Total"] for v in ventas)
+            total_vendido = total_vendido_hoy()
             total_cobrado = total_cobrado_hoy()
-            total_pendiente = sum(v["Saldo"] for v in ventas)
+            total_pendiente = total_pendiente_hoy()
+
 
             resumen_data = [
                 ["Total Vendido", f"S/. {total_vendido:.2f}"],
