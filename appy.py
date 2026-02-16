@@ -32,6 +32,9 @@ def conectar():
 # --------------------------------
 # FUNCIONES BD
 # --------------------------------
+def hora_peru():
+    return datetime.now(ZoneInfo("America/Lima"))
+    
 def obtener_ventas():
     conn = conectar()
     cur = conn.cursor()
@@ -90,12 +93,14 @@ def registrar_venta(venta):
     if venta["Pagado"] > 0:
         cur.execute("""
             INSERT INTO pagos (venta_id, fecha, monto, metodo)
-            VALUES (%s, NOW(), %s, %s)
+            VALUES (%s, %s, %s, %s)
         """, (
             venta_id,
+            hora_peru(),   # ✅ AQUÍ ESTÁ LA CLAVE
             venta["Pagado"],
             venta["Método de pago"]
         ))
+
 
     conn.commit()
     conn.close()
@@ -111,9 +116,14 @@ def completar_pago(id_venta, saldo_actual):
 
     # Insertar pago
     cur.execute("""
-        INSERT INTO pagos (venta_id, fecha, monto, metodo)
-        VALUES (%s, NOW() AT TIME ZONE 'America/Lima', %s, %s)
-    """, (id_venta, saldo_actual, "Método correspondiente"))
+    INSERT INTO pagos (venta_id, fecha, monto, metodo)
+    VALUES (%s, %s, %s, %s)
+    """, (
+        id_venta,
+        hora_peru(),   # ✅ uniforme y correcto
+        saldo_actual,
+        "Método correspondiente"
+    ))
 
     # Actualizar venta
     cur.execute("""
@@ -144,7 +154,7 @@ def marcar_entrega(id_venta, estado):
     conn.commit()
     conn.close()
     st.rerun()
-def hora_peru():
+_peru():
     return datetime.now(ZoneInfo("America/Lima"))
     
 def cierre_de_caja(usuario_actual):
