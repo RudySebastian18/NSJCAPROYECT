@@ -113,6 +113,10 @@ def registrar_venta(venta):
 def completar_pago(id_venta, saldo_actual):
     conn = conectar()
     cur = conn.cursor()
+    
+    # 🔥 OBTENER EL MÉTODO DE PAGO ORIGINAL
+    cur.execute("SELECT metodo_pago FROM ventas WHERE id = %s", (id_venta,))
+    metodo_original = cur.fetchone()[0]
 
     # Insertar pago
     cur.execute("""
@@ -120,9 +124,9 @@ def completar_pago(id_venta, saldo_actual):
     VALUES (%s, %s, %s, %s)
     """, (
         id_venta,
-        hora_peru(),   # ✅ uniforme y correcto
+        hora_peru(),
         saldo_actual,
-        "Método correspondiente"
+        metodo_original  # ✅ USA EL MÉTODO ORIGINAL
     ))
 
     # Actualizar venta
@@ -137,7 +141,6 @@ def completar_pago(id_venta, saldo_actual):
     conn.commit()
     conn.close()
     st.rerun()
-
 
 def eliminar_venta(id_venta):
     conn = conectar()
