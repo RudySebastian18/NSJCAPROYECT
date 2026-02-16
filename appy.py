@@ -154,7 +154,7 @@ def marcar_entrega(id_venta, estado):
     conn.commit()
     conn.close()
     st.rerun()
-_peru():
+    hora_peru():
     return datetime.now(ZoneInfo("America/Lima"))
     
 def cierre_de_caja(usuario_actual):
