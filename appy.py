@@ -263,6 +263,21 @@ def total_pendiente_hoy():
     conn.close()
     return total
 
+def obtener_pagos_del_dia():
+    conn = conectar()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT monto, metodo
+        FROM pagos
+        WHERE DATE(fecha AT TIME ZONE 'America/Lima') =
+              DATE(NOW() AT TIME ZONE 'America/Lima')
+    """)
+
+    rows = cur.fetchall()
+    conn.close()
+
+    return rows
 
 # --------------------------------
 # INTERFAZ
@@ -324,8 +339,12 @@ with tab_ventas:
         peru = pytz.timezone("America/Lima")
         hoy = datetime.now(peru).date()
         
-        total_vendido = total_vendido_hoy()
-        total_pendiente = total_pendiente_hoy()
+        pagos_hoy = obtener_pagos_del_dia()
+
+        total_cobrado = sum(p[0] for p in pagos_hoy)
+        total_vendido = sum(v["Total"] for v in ventas)
+        total_pendiente = sum(v["Saldo"] for v in ventas)
+
         
         # 🔹 NUEVO: total cobrado real desde tabla pagos
         conn = conectar()
@@ -405,22 +424,17 @@ with tab_ventas:
 # ======================================
 with tab_estadisticas:
 
-    from datetime import datetime
-    import pytz
-
-    peru = pytz.timezone("America/Lima")
-    hoy = datetime.now(peru).date()
-
     conn = conectar()
     cur = conn.cursor()
 
     cur.execute("""
         SELECT metodo, COUNT(*), COALESCE(SUM(monto),0)
         FROM pagos
-        WHERE DATE(fecha) = %s
+        WHERE DATE(fecha AT TIME ZONE 'America/Lima') =
+              DATE(NOW() AT TIME ZONE 'America/Lima')
         GROUP BY metodo
         ORDER BY SUM(monto) DESC
-    """, (hoy,))
+    """)
 
     resultados = cur.fetchall()
     conn.close()
@@ -435,7 +449,6 @@ with tab_estadisticas:
             st.divider()
     else:
         st.info("No hay pagos registrados hoy.")
-
 
 # ======================================
 # CIERRE DE CAJA
