@@ -255,11 +255,11 @@ def total_cobrado_hoy():
     cur.execute("""
         SELECT COALESCE(SUM(monto),0)
         FROM pagos
-        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = DATE(NOW() AT TIME ZONE 'America/Lima')
+        WHERE fecha::date = CURRENT_DATE
     """)
     total = cur.fetchone()[0]
     conn.close()
-    return float(total)  # ✅ Asegurar que sea float
+    return float(total)
 
 
 
@@ -278,17 +278,13 @@ def total_pendiente_hoy():
 def obtener_pagos_del_dia():
     conn = conectar()
     cur = conn.cursor()
-
     cur.execute("""
         SELECT monto, metodo
         FROM pagos
-        WHERE DATE(fecha AT TIME ZONE 'America/Lima') =
-              DATE(NOW() AT TIME ZONE 'America/Lima')
+        WHERE fecha::date = CURRENT_DATE
     """)
-
     rows = cur.fetchall()
     conn.close()
-
     return rows
 
 # --------------------------------
@@ -362,8 +358,7 @@ with tab_ventas:
         cur.execute("""
             SELECT COALESCE(SUM(monto),0)
             FROM pagos
-            WHERE DATE(fecha AT TIME ZONE 'America/Lima') =
-                  DATE(NOW() AT TIME ZONE 'America/Lima')
+            WHERE fecha::date = CURRENT_DATE
         """)
         
         total_cobrado = cur.fetchone()[0]
@@ -451,8 +446,7 @@ with tab_estadisticas:
     cur.execute("""
         SELECT metodo, COUNT(*), COALESCE(SUM(monto),0)
         FROM pagos
-        WHERE DATE(fecha AT TIME ZONE 'America/Lima') =
-              DATE(NOW() AT TIME ZONE 'America/Lima')
+        WHERE fecha::date = CURRENT_DATE
         GROUP BY metodo
         ORDER BY SUM(monto) DESC
     """)
