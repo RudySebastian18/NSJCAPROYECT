@@ -419,9 +419,10 @@ with tab_ventas:
                 colA, colB, colC = st.columns(3)
         
                 # Completar pago
+              
                 if v["Saldo"] > 0:
                     if colA.button("💵 Completar pago", key=f"pago_{v['id']}"):
-                        completar_pago(v["id"], v["Total"])
+                        completar_pago(v["id"], v["Saldo"])  
         
                 # Marcar entrega
                 nuevo_estado = "Entregado" if v["Entrega"] == "Pendiente" else "Pendiente"
