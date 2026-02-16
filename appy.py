@@ -341,24 +341,22 @@ with tab_ventas:
         
         pagos_hoy = obtener_pagos_del_dia()
 
-        total_cobrado = sum(p[0] for p in pagos_hoy)
         total_vendido = sum(v["Total"] for v in ventas)
         total_pendiente = sum(v["Saldo"] for v in ventas)
-
         
-        # 🔹 NUEVO: total cobrado real desde tabla pagos
         conn = conectar()
         cur = conn.cursor()
         
         cur.execute("""
             SELECT COALESCE(SUM(monto),0)
             FROM pagos
-            WHERE DATE(fecha) = %s
-        """, (hoy,))
+            WHERE DATE(fecha AT TIME ZONE 'America/Lima') =
+                  DATE(NOW() AT TIME ZONE 'America/Lima')
+        """)
         
         total_cobrado = cur.fetchone()[0]
-        
         conn.close()
+
 
 
         col1, col2, col3 = st.columns(3)
