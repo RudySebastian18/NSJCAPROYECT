@@ -255,11 +255,12 @@ def total_cobrado_hoy():
     cur.execute("""
         SELECT COALESCE(SUM(monto),0)
         FROM pagos
-        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = DATE(NOW() AT TIME ZONE 'America/Lima')
     """)
     total = cur.fetchone()[0]
     conn.close()
-    return total
+    return float(total)  # ✅ Asegurar que sea float
+
 
 
 def total_pendiente_hoy():
