@@ -105,17 +105,29 @@ def registrar_venta(venta):
 
 
 
-def completar_pago(id_venta, total):
+def completar_pago(id_venta, saldo_actual):
     conn = conectar()
     cur = conn.cursor()
+
+    # Insertar pago
+    cur.execute("""
+        INSERT INTO pagos (venta_id, fecha, monto, metodo)
+        VALUES (%s, NOW() AT TIME ZONE 'America/Lima', %s, %s)
+    """, (id_venta, saldo_actual, "Método correspondiente"))
+
+    # Actualizar venta
     cur.execute("""
         UPDATE ventas
-        SET pagado=%s, saldo=0, estado='Pagado'
-        WHERE id=%s
-    """, (total, id_venta))
+        SET pagado = pagado + %s,
+            saldo = 0,
+            estado = 'Pagado'
+        WHERE id = %s
+    """, (saldo_actual, id_venta))
+
     conn.commit()
     conn.close()
     st.rerun()
+
 
 def eliminar_venta(id_venta):
     conn = conectar()
@@ -213,6 +225,19 @@ def obtener_cierres():
     conn.close()
     return data
 
+def total_cobrado_hoy():
+    conn = conectar()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT COALESCE(SUM(monto),0)
+        FROM pagos
+        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+    """)
+
+    total = cur.fetchone()[0]
+    conn.close()
+    return float(total)
 
 # --------------------------------
 # INTERFAZ
@@ -432,7 +457,7 @@ with tab_reporte:
 
             # TOTALES
             total_vendido = sum(v["Total"] for v in ventas)
-            total_cobrado = sum(v["Pagado"] for v in ventas)
+            total_cobrado = total_cobrado_hoy()
             total_pendiente = sum(v["Saldo"] for v in ventas)
 
             resumen_data = [
