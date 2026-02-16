@@ -364,17 +364,6 @@ with tab_ventas:
         total_cobrado = cur.fetchone()[0]
         conn.close()
 
-        # 🔍 DEBUG TEMPORAL
-        conn = conectar()
-        cur = conn.cursor()
-        
-        cur.execute("SELECT fecha, monto FROM pagos ORDER BY fecha DESC LIMIT 5")
-        debug = cur.fetchall()
-        
-        conn.close()
-        
-        st.write("DEBUG PAGOS:", debug)
-
 
 
         col1, col2, col3 = st.columns(3)
