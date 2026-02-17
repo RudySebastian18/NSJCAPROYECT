@@ -96,19 +96,17 @@ def registrar_venta(venta):
             VALUES (%s, %s, %s, %s)
         """, (
             venta_id,
-            hora_peru(),   # ✅ AQUÍ ESTÁ LA CLAVE
+            hora_peru(),
             venta["Pagado"],
             venta["Método de pago"]
         ))
 
-
     conn.commit()
     conn.close()
 
-    st.success("✅ Venta registrada correctamente")
+    # ✅ GUARDAR MENSAJE EN SESSION STATE ANTES DEL RERUN
+    st.session_state.mensaje_exito = f"✅ Venta #{venta_id} registrada correctamente"
     st.rerun()
-
-
 
 def completar_pago(id_venta, saldo_actual):
     conn = conectar()
@@ -304,6 +302,11 @@ tab_venta, tab_ventas, tab_estadisticas, tab_reporte = st.tabs(
 # NUEVA VENTA
 # ======================================
 with tab_venta:
+
+    # ✅ MOSTRAR MENSAJE SI EXISTE
+    if "mensaje_exito" in st.session_state:
+        st.success(st.session_state.mensaje_exito)
+        del st.session_state.mensaje_exito
     cliente = st.text_input("Cliente")
     producto = st.text_input("Producto")
     total = st.number_input("Total", min_value=0.0)
@@ -498,15 +501,14 @@ with tab_reporte:
             ))
             elementos.append(Spacer(1, 20))
 
-            # TOTALES
-            total_vendido = total_vendido_hoy()
-            total_cobrado = total_cobrado_hoy()
-            total_pendiente = total_pendiente_hoy()
-
+            # ✅ TOTALES BASADOS EN LAS VENTAS ACTUALES (no cerradas)
+            total_vendido = sum(v["Total"] for v in ventas)
+            total_pagado = sum(v["Pagado"] for v in ventas)
+            total_pendiente = sum(v["Saldo"] for v in ventas)
 
             resumen_data = [
                 ["Total Vendido", f"S/. {total_vendido:.2f}"],
-                ["Total Cobrado", f"S/. {total_cobrado:.2f}"],
+                ["Total Cobrado", f"S/. {total_pagado:.2f}"],
                 ["Total Pendiente", f"S/. {total_pendiente:.2f}"],
             ]
 
@@ -529,7 +531,7 @@ with tab_reporte:
 
             for v in ventas:
                 data.append([
-                    str(v["Fecha"]),
+                    v["Fecha"].strftime('%d/%m/%Y %H:%M'),  # ✅ Formato correcto
                     v["Cliente"],
                     v["Producto"],
                     f"S/. {v['Total']:.2f}",
