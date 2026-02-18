@@ -421,6 +421,33 @@ def mostrar_estadisticas():
             st.divider()
     else:
         st.info("No hay pagos registrados hoy.")
+
+# --------------------------------
+# AUTO-REFRESH
+# --------------------------------
+import time
+
+# Botón de actualización manual en la sidebar
+with st.sidebar:
+    st.markdown("### ⚙️ Configuración")
+    
+    auto_refresh = st.checkbox("🔄 Auto-actualizar cada 3s", value=False)
+    
+    if st.button("🔄 Actualizar ahora", use_container_width=True):
+        st.rerun()
+    
+    if auto_refresh:
+        time.sleep(3)
+        st.rerun()
+    
+    st.divider()
+    st.caption(f"Última actualización: {hora_peru().strftime('%H:%M:%S')}")
+
+# --------------------------------
+# INTERFAZ
+# --------------------------------
+st.title("Sistema Comercial - NSJ CAPROYECT")
+st.divider()
 # --------------------------------
 # INTERFAZ
 # --------------------------------
