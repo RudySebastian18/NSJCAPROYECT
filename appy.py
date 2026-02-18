@@ -108,13 +108,9 @@ def registrar_venta(venta):
     st.session_state.mensaje_exito = f"✅ Venta #{venta_id} registrada correctamente"
     st.rerun()
 
-def completar_pago(id_venta, saldo_actual):
+def completar_pago(id_venta, saldo_actual, metodo_pago):
     conn = conectar()
     cur = conn.cursor()
-    
-    # 🔥 OBTENER EL MÉTODO DE PAGO ORIGINAL
-    cur.execute("SELECT metodo_pago FROM ventas WHERE id = %s", (id_venta,))
-    metodo_original = cur.fetchone()[0]
 
     # Insertar pago
     cur.execute("""
@@ -124,7 +120,7 @@ def completar_pago(id_venta, saldo_actual):
         id_venta,
         hora_peru(),
         saldo_actual,
-        metodo_original  # ✅ USA EL MÉTODO ORIGINAL
+        metodo_pago  # ✅ AHORA USA EL MÉTODO ELEGIDO
     ))
 
     # Actualizar venta
@@ -138,6 +134,7 @@ def completar_pago(id_venta, saldo_actual):
 
     conn.commit()
     conn.close()
+    st.session_state.mensaje_exito = f"✅ Pago completado correctamente (S/. {saldo_actual:.2f})"
     st.rerun()
 
 def eliminar_venta(id_venta):
@@ -284,6 +281,28 @@ def obtener_pagos_del_dia():
     rows = cur.fetchall()
     conn.close()
     return rows
+    
+def marcar_entrega(id_venta, estado):
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("UPDATE ventas SET entrega=%s WHERE id=%s", (estado, id_venta))
+    conn.commit()
+    conn.close()
+    st.session_state.mensaje_exito = f"✅ Entrega marcada como: {estado}"
+    st.rerun()
+
+def eliminar_venta(id_venta):
+    conn = conectar()
+    cur = conn.cursor()
+    
+    # Eliminar pagos relacionados primero
+    cur.execute("DELETE FROM pagos WHERE venta_id=%s", (id_venta,))
+    cur.execute("DELETE FROM ventas WHERE id=%s", (id_venta,))
+    
+    conn.commit()
+    conn.close()
+    st.session_state.mensaje_exito = "✅ Venta eliminada correctamente"
+    st.rerun()
 
 # --------------------------------
 # INTERFAZ
@@ -341,6 +360,12 @@ with tab_venta:
 # VENTAS
 # ======================================
 with tab_ventas:
+    
+    # ✅ MOSTRAR MENSAJE SI EXISTE
+    if "mensaje_exito" in st.session_state:
+        st.success(st.session_state.mensaje_exito)
+        del st.session_state.mensaje_exito
+    
     ventas = obtener_ventas()
 
     if ventas:
@@ -367,8 +392,6 @@ with tab_ventas:
         total_cobrado = cur.fetchone()[0]
         conn.close()
 
-
-
         col1, col2, col3 = st.columns(3)
         col1.metric("Total Vendido", f"S/. {total_vendido:.2f}")
         col2.metric("Total Cobrado", f"S/. {total_cobrado:.2f}")
@@ -386,7 +409,7 @@ with tab_ventas:
                 with col1:
                     st.write(f"👤 Cliente: {v['Cliente']}")
                     st.write(f"📦 Producto: {v['Producto']}")
-                    st.write(f"💳 Método de pago: {v['Método de pago']}")
+                    st.write(f"💳 Método de pago inicial: {v['Método de pago']}")
         
                 with col2:
                     st.write(f"💰 Total: S/. {v['Total']:.2f}")
@@ -410,11 +433,18 @@ with tab_ventas:
                 # -----------------------------
                 colA, colB, colC = st.columns(3)
         
-                # Completar pago
-              
+                # ✅ COMPLETAR PAGO CON FORMULARIO
                 if v["Saldo"] > 0:
-                    if colA.button("💵 Completar pago", key=f"pago_{v['id']}"):
-                        completar_pago(v["id"], v["Saldo"])  
+                    with colA:
+                        with st.popover("💵 Completar pago"):
+                            st.write(f"**Saldo pendiente:** S/. {v['Saldo']:.2f}")
+                            metodo_completar = st.selectbox(
+                                "Método de pago",
+                                METODOS_PAGO,
+                                key=f"metodo_pago_{v['id']}"
+                            )
+                            if st.button("Confirmar pago", key=f"confirmar_{v['id']}"):
+                                completar_pago(v["id"], v["Saldo"], metodo_completar)
         
                 # Marcar entrega
                 nuevo_estado = "Entregado" if v["Entrega"] == "Pendiente" else "Pendiente"
@@ -426,7 +456,6 @@ with tab_ventas:
                     eliminar_venta(v["id"])
         
                 st.divider()
-
 
 # ======================================
 # ESTADÍSTICAS
