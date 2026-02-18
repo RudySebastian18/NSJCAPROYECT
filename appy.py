@@ -303,7 +303,124 @@ def eliminar_venta(id_venta):
     conn.close()
     st.session_state.mensaje_exito = "✅ Venta eliminada correctamente"
     st.rerun()
+# --------------------------------
+# FRAGMENTOS OPTIMIZADOS
+# --------------------------------
 
+@st.fragment
+def mostrar_ventas():
+    ventas = obtener_ventas()
+    
+    if not ventas:
+        st.info("No hay ventas registradas")
+        return
+
+    # Obtener total cobrado
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT COALESCE(SUM(monto),0)
+        FROM pagos
+        WHERE fecha::date = CURRENT_DATE
+    """)
+    total_cobrado = cur.fetchone()[0]
+    conn.close()
+
+    total_vendido = sum(v["Total"] for v in ventas)
+    total_pendiente = sum(v["Saldo"] for v in ventas)
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Vendido", f"S/. {total_vendido:.2f}")
+    col2.metric("Total Cobrado", f"S/. {total_cobrado:.2f}")
+    col3.metric("Total Pendiente", f"S/. {total_pendiente:.2f}")
+
+    for v in ventas:
+        with st.container(border=True):
+    
+            st.markdown(f"### 🧾 Pedido #{v['id']}")
+    
+            st.write(f"📅 Fecha: {v['Fecha'].strftime('%d/%m/%Y %H:%M')}")
+            
+            col1, col2 = st.columns(2)
+    
+            with col1:
+                st.write(f"👤 Cliente: {v['Cliente']}")
+                st.write(f"📦 Producto: {v['Producto']}")
+                st.write(f"💳 Método de pago inicial: {v['Método de pago']}")
+    
+            with col2:
+                st.write(f"💰 Total: S/. {v['Total']:.2f}")
+                st.write(f"💵 Pagado: S/. {v['Pagado']:.2f}")
+                st.write(f"🧾 Saldo: S/. {v['Saldo']:.2f}")
+    
+            # Estado de pago
+            if v["Saldo"] > 0:
+                st.warning(f"⚠️ Adelanto recibido. Falta pagar: S/. {v['Saldo']:.2f}")
+            else:
+                st.success("✅ Pagado completamente")
+    
+            # Estado de entrega
+            if v["Entrega"] == "Pendiente":
+                st.info("🚚 Entrega pendiente")
+            else:
+                st.success("📦 Pedido entregado")
+    
+            # BOTONES DE ACCIÓN
+            colA, colB, colC = st.columns(3)
+    
+            # Completar pago
+            if v["Saldo"] > 0:
+                with colA:
+                    popover = st.popover("💵 Completar pago")
+                    with popover:
+                        st.write(f"**Saldo pendiente:** S/. {v['Saldo']:.2f}")
+                        metodo_completar = st.selectbox(
+                            "Método de pago",
+                            METODOS_PAGO,
+                            key=f"metodo_pago_{v['id']}"
+                        )
+                        if st.button("✅ Confirmar pago", key=f"confirmar_{v['id']}", type="primary"):
+                            completar_pago(v["id"], v["Saldo"], metodo_completar)
+    
+            # Marcar entrega
+            with colB:
+                nuevo_estado = "Entregado" if v["Entrega"] == "Pendiente" else "Pendiente"
+                if st.button(f"🚚 Marcar {nuevo_estado}", key=f"ent_{v['id']}"):
+                    marcar_entrega(v["id"], nuevo_estado)
+    
+            # Eliminar
+            with colC:
+                if st.button("🗑 Eliminar", key=f"del_{v['id']}"):
+                    eliminar_venta(v["id"])
+    
+            st.divider()
+
+@st.fragment
+def mostrar_estadisticas():
+    conn = conectar()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT metodo, COUNT(*), COALESCE(SUM(monto),0)
+        FROM pagos
+        WHERE fecha::date = CURRENT_DATE
+        GROUP BY metodo
+        ORDER BY SUM(monto) DESC
+    """)
+
+    resultados = cur.fetchall()
+    conn.close()
+
+    st.subheader("📊 Métodos de pago más usados (Hoy)")
+
+    if resultados:
+        for metodo, cantidad, total in resultados:
+            st.write(f"💳 {metodo}")
+            st.write(f"   • Cantidad de pagos: {cantidad}")
+            st.write(f"   • Total recibido: S/. {total:.2f}")
+            st.divider()
+    else:
+        st.info("No hay pagos registrados hoy.")
 # --------------------------------
 # INTERFAZ
 # --------------------------------
@@ -366,130 +483,15 @@ with tab_ventas:
         st.success(st.session_state.mensaje_exito)
         del st.session_state.mensaje_exito
     
-    ventas = obtener_ventas()
-
-    if ventas:
-        from datetime import datetime
-        import pytz
-        
-        peru = pytz.timezone("America/Lima")
-        hoy = datetime.now(peru).date()
-        
-        pagos_hoy = obtener_pagos_del_dia()
-
-        total_vendido = sum(v["Total"] for v in ventas)
-        total_pendiente = sum(v["Saldo"] for v in ventas)
-        
-        conn = conectar()
-        cur = conn.cursor()
-        
-        cur.execute("""
-            SELECT COALESCE(SUM(monto),0)
-            FROM pagos
-            WHERE fecha::date = CURRENT_DATE
-        """)
-        
-        total_cobrado = cur.fetchone()[0]
-        conn.close()
-
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total Vendido", f"S/. {total_vendido:.2f}")
-        col2.metric("Total Cobrado", f"S/. {total_cobrado:.2f}")
-        col3.metric("Total Pendiente", f"S/. {total_pendiente:.2f}")
-
-        for v in ventas:
-            with st.container(border=True):
-        
-                st.markdown(f"### 🧾 Pedido #{v['id']}")
-        
-                st.write(f"📅 Fecha: {v['Fecha'].strftime('%d/%m/%Y %H:%M')}")
-                
-                col1, col2 = st.columns(2)
-        
-                with col1:
-                    st.write(f"👤 Cliente: {v['Cliente']}")
-                    st.write(f"📦 Producto: {v['Producto']}")
-                    st.write(f"💳 Método de pago inicial: {v['Método de pago']}")
-        
-                with col2:
-                    st.write(f"💰 Total: S/. {v['Total']:.2f}")
-                    st.write(f"💵 Pagado: S/. {v['Pagado']:.2f}")
-                    st.write(f"🧾 Saldo: S/. {v['Saldo']:.2f}")
-        
-                # Estado de pago
-                if v["Saldo"] > 0:
-                    st.warning(f"⚠️ Adelanto recibido. Falta pagar: S/. {v['Saldo']:.2f}")
-                else:
-                    st.success("✅ Pagado completamente")
-        
-                # Estado de entrega
-                if v["Entrega"] == "Pendiente":
-                    st.info("🚚 Entrega pendiente")
-                else:
-                    st.success("📦 Pedido entregado")
-        
-                # -----------------------------
-                # BOTONES DE ACCIÓN
-                # -----------------------------
-                colA, colB, colC = st.columns(3)
-        
-                # ✅ COMPLETAR PAGO CON POPOVER
-                if v["Saldo"] > 0:
-                    with colA:
-                        # El popover actúa como el botón
-                        popover = st.popover("💵 Completar pago")
-                        with popover:
-                            st.write(f"**Saldo pendiente:** S/. {v['Saldo']:.2f}")
-                            metodo_completar = st.selectbox(
-                                "Método de pago",
-                                METODOS_PAGO,
-                                key=f"metodo_pago_{v['id']}"
-                            )
-                            if st.button("✅ Confirmar pago", key=f"confirmar_{v['id']}", type="primary"):
-                                completar_pago(v["id"], v["Saldo"], metodo_completar)
-        
-                # Marcar entrega
-                with colB:
-                    nuevo_estado = "Entregado" if v["Entrega"] == "Pendiente" else "Pendiente"
-                    if st.button(f"🚚 Marcar {nuevo_estado}", key=f"ent_{v['id']}"):
-                        marcar_entrega(v["id"], nuevo_estado)
-        
-                # Eliminar
-                with colC:
-                    if st.button("🗑 Eliminar", key=f"del_{v['id']}"):
-                        eliminar_venta(v["id"])
-        
-                st.divider()
+    # ✅ USAR FRAGMENTO
+    mostrar_ventas()
 
 # ======================================
 # ESTADÍSTICAS
 # ======================================
 with tab_estadisticas:
-
-    conn = conectar()
-    cur = conn.cursor()
-
-    cur.execute("""
-        SELECT metodo, COUNT(*), COALESCE(SUM(monto),0)
-        FROM pagos
-        WHERE fecha::date = CURRENT_DATE
-        GROUP BY metodo
-        ORDER BY SUM(monto) DESC
-    """)
-
-    resultados = cur.fetchall()
-    conn.close()
-
-    st.subheader("📊 Métodos de pago más usados (Hoy)")
-
-    if resultados:
-        for metodo, cantidad, total in resultados:
-            st.write(f"💳 {metodo}")
-            st.write(f"   • Cantidad de pagos: {cantidad}")
-            st.write(f"   • Total recibido: S/. {total:.2f}")
-            st.divider()
-    else:
-        st.info("No hay pagos registrados hoy.")
+    # ✅ USAR FRAGMENTO
+    mostrar_estadisticas()
 
 # ======================================
 # CIERRE DE CAJA
