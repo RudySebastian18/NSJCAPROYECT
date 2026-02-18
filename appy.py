@@ -433,27 +433,31 @@ with tab_ventas:
                 # -----------------------------
                 colA, colB, colC = st.columns(3)
         
-                # ✅ COMPLETAR PAGO CON FORMULARIO
+                # ✅ COMPLETAR PAGO CON POPOVER
                 if v["Saldo"] > 0:
                     with colA:
-                        with st.popover("💵 Completar pago"):
+                        # El popover actúa como el botón
+                        popover = st.popover("💵 Completar pago")
+                        with popover:
                             st.write(f"**Saldo pendiente:** S/. {v['Saldo']:.2f}")
                             metodo_completar = st.selectbox(
                                 "Método de pago",
                                 METODOS_PAGO,
                                 key=f"metodo_pago_{v['id']}"
                             )
-                            if st.button("Confirmar pago", key=f"confirmar_{v['id']}"):
+                            if st.button("✅ Confirmar pago", key=f"confirmar_{v['id']}", type="primary"):
                                 completar_pago(v["id"], v["Saldo"], metodo_completar)
         
                 # Marcar entrega
-                nuevo_estado = "Entregado" if v["Entrega"] == "Pendiente" else "Pendiente"
-                if colB.button(f"🚚 Marcar {nuevo_estado}", key=f"ent_{v['id']}"):
-                    marcar_entrega(v["id"], nuevo_estado)
+                with colB:
+                    nuevo_estado = "Entregado" if v["Entrega"] == "Pendiente" else "Pendiente"
+                    if st.button(f"🚚 Marcar {nuevo_estado}", key=f"ent_{v['id']}"):
+                        marcar_entrega(v["id"], nuevo_estado)
         
                 # Eliminar
-                if colC.button("🗑 Eliminar", key=f"del_{v['id']}"):
-                    eliminar_venta(v["id"])
+                with colC:
+                    if st.button("🗑 Eliminar", key=f"del_{v['id']}"):
+                        eliminar_venta(v["id"])
         
                 st.divider()
 
