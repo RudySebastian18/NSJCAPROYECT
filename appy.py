@@ -313,19 +313,88 @@ def eliminar_venta(id_venta):
     conn.close()
     st.session_state.mensaje_exito = "✅ Venta eliminada correctamente"
     st.rerun()
+def obtener_ventas_hoy():
+    """Ventas del día actual no cerradas"""
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
+        FROM ventas
+        WHERE cerrado = FALSE
+        AND DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+        ORDER BY fecha DESC
+    """)
+    rows = cur.fetchall()
+    conn.close()
+
+    ventas = []
+    for r in rows:
+        fecha_peru = r[1].astimezone(ZoneInfo("America/Lima"))
+        ventas.append({
+            "id": r[0],
+            "Fecha": fecha_peru,
+            "Cliente": r[2],
+            "Producto": r[3],
+            "Total": float(r[4]),
+            "Pagado": float(r[5]),
+            "Saldo": float(r[6]),
+            "Estado": r[7],
+            "Método de pago": r[8],
+            "Entrega": r[9]
+        })
+    return ventas
+
+def obtener_todas_ventas():
+    """Todas las ventas no cerradas (incluye días anteriores)"""
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
+        FROM ventas
+        WHERE cerrado = FALSE
+        ORDER BY fecha DESC
+    """)
+    rows = cur.fetchall()
+    conn.close()
+
+    ventas = []
+    for r in rows:
+        fecha_peru = r[1].astimezone(ZoneInfo("America/Lima"))
+        ventas.append({
+            "id": r[0],
+            "Fecha": fecha_peru,
+            "Cliente": r[2],
+            "Producto": r[3],
+            "Total": float(r[4]),
+            "Pagado": float(r[5]),
+            "Saldo": float(r[6]),
+            "Estado": r[7],
+            "Método de pago": r[8],
+            "Entrega": r[9]
+        })
+    return ventas
 # --------------------------------
 # FRAGMENTOS OPTIMIZADOS
 # --------------------------------
 
 @st.fragment
 def mostrar_ventas():
-    ventas = obtener_ventas()
+    filtro = st.radio(
+        "Mostrar ventas:",
+        ["Solo hoy", "Todas pendientes"],
+        horizontal=True
+    )
+    
+    if filtro == "Solo hoy":
+        ventas = obtener_ventas_hoy()
+    else:
+        ventas = obtener_todas_ventas()
     
     if not ventas:
         st.info("No hay ventas registradas")
         return
 
-    # Obtener total cobrado
+    # Obtener total cobrado HOY
     conn = conectar()
     cur = conn.cursor()
     cur.execute("""
@@ -336,14 +405,14 @@ def mostrar_ventas():
     total_cobrado = cur.fetchone()[0]
     conn.close()
 
+    # ✅ Calcular totales basados en las ventas filtradas
     total_vendido = sum(v["Total"] for v in ventas)
     total_pendiente = sum(v["Saldo"] for v in ventas)
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Vendido", f"S/. {total_vendido:.2f}")
-    col2.metric("Total Cobrado", f"S/. {total_cobrado:.2f}")
+    col2.metric("Total Cobrado (Hoy)", f"S/. {total_cobrado:.2f}")
     col3.metric("Total Pendiente", f"S/. {total_pendiente:.2f}")
-
     for v in ventas:
         with st.container(border=True):
     
