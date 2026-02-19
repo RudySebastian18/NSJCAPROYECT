@@ -14,7 +14,6 @@ from reportlab.lib.units import inch
 # --------------------------------
 # CONFIG
 # --------------------------------
-st.set_page_config(page_title="Sistema Comercial - NSJ CAPROYECT", layout="wide")
 
 # --------------------------------
 # CONEXIÓN BD
