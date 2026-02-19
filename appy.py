@@ -157,38 +157,49 @@ def cierre_de_caja(usuario_actual):
     conn = conectar()
     cur = conn.cursor()
 
-    # Obtener ventas cerrables
+    # ✅ OBTENER VENTAS CERRABLES
     cur.execute("""
-        SELECT id, pagado, metodo_pago
+        SELECT id
         FROM ventas
         WHERE cerrado = FALSE
         AND entrega = 'Entregado'
         AND saldo = 0
     """)
-    ventas = cur.fetchall()
+    ventas_ids = cur.fetchall()
 
-    if not ventas:
+    if not ventas_ids:
         conn.close()
         return False
 
-    total_general = 0
+    # ✅ OBTENER PAGOS AGRUPADOS POR MÉTODO (DE LA TABLA PAGOS)
+    ids = [v[0] for v in ventas_ids]
+    
+    cur.execute("""
+        SELECT 
+            p.metodo,
+            COALESCE(SUM(p.monto), 0) as total
+        FROM pagos p
+        WHERE p.venta_id = ANY(%s)
+        GROUP BY p.metodo
+    """, (ids,))
+    
+    pagos_por_metodo = cur.fetchall()
+
+    # ✅ CALCULAR TOTALES POR MÉTODO
     totales_metodo = {
         "Efectivo": 0,
         "Yape": 0,
         "Plin": 0,
         "Transferencia": 0
     }
-
-    ids = []
-
-    for v in ventas:
-        ids.append(v[0])
-        monto = float(v[1])
-        metodo = v[2]
-
-        total_general += monto
+    
+    total_general = 0
+    
+    for metodo, monto in pagos_por_metodo:
+        monto_float = float(monto)
+        total_general += monto_float
         if metodo in totales_metodo:
-            totales_metodo[metodo] += monto
+            totales_metodo[metodo] += monto_float
 
     # Insertar cierre
     cur.execute("""
@@ -214,9 +225,9 @@ def cierre_de_caja(usuario_actual):
 
     conn.commit()
     conn.close()
-
+    
+    st.session_state.mensaje_exito = f"✅ Cierre realizado: S/. {total_general:.2f}"
     return True
-
 def obtener_cierres():
     conn = conectar()
     cur = conn.cursor()
