@@ -136,14 +136,6 @@ def completar_pago(id_venta, saldo_actual, metodo_pago):
     st.session_state.mensaje_exito = f"✅ Pago completado correctamente (S/. {saldo_actual:.2f})"
     st.rerun()
 
-def eliminar_venta(id_venta):
-    conn = conectar()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM ventas WHERE id=%s", (id_venta,))
-    conn.commit()
-    conn.close()
-    st.rerun()
-
 def marcar_entrega(id_venta, estado):
     conn = conectar()
     cur = conn.cursor()
