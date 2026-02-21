@@ -239,7 +239,8 @@ def total_vendido_hoy():
     cur.execute("""
         SELECT COALESCE(SUM(total),0)
         FROM ventas
-        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
+              DATE(NOW() AT TIME ZONE 'America/Lima')
     """)
     total = cur.fetchone()[0]
     conn.close()
@@ -252,7 +253,8 @@ def total_cobrado_hoy():
     cur.execute("""
         SELECT COALESCE(SUM(monto),0)
         FROM pagos
-        WHERE fecha::date = CURRENT_DATE
+        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
+              DATE(NOW() AT TIME ZONE 'America/Lima')
     """)
     total = cur.fetchone()[0]
     conn.close()
@@ -266,7 +268,8 @@ def total_pendiente_hoy():
     cur.execute("""
         SELECT COALESCE(SUM(saldo),0)
         FROM ventas
-        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
+              DATE(NOW() AT TIME ZONE 'America/Lima')
     """)
     total = cur.fetchone()[0]
     conn.close()
@@ -278,7 +281,8 @@ def obtener_pagos_del_dia():
     cur.execute("""
         SELECT monto, metodo
         FROM pagos
-        WHERE fecha::date = CURRENT_DATE
+        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
+              DATE(NOW() AT TIME ZONE 'America/Lima')
     """)
     rows = cur.fetchall()
     conn.close()
@@ -313,7 +317,8 @@ def obtener_ventas_hoy():
         SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
         FROM ventas
         WHERE cerrado = FALSE
-        AND DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+        AND DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
+            DATE(NOW() AT TIME ZONE 'America/Lima')
         ORDER BY fecha DESC
     """)
     rows = cur.fetchall()
@@ -338,6 +343,7 @@ def obtener_ventas_hoy():
 
 def obtener_todas_ventas():
     """Todas las ventas no cerradas (incluye días anteriores)"""
+    return obtener_ventas()  # Usa la función existente
     conn = conectar()
     cur = conn.cursor()
     cur.execute("""
@@ -371,12 +377,14 @@ def obtener_todas_ventas():
 
 @st.fragment
 def mostrar_ventas():
+    # ✅ Selector de filtro PRIMERO
     filtro = st.radio(
         "Mostrar ventas:",
         ["Solo hoy", "Todas pendientes"],
         horizontal=True
     )
     
+    # ✅ Obtener ventas según filtro
     if filtro == "Solo hoy":
         ventas = obtener_ventas_hoy()
     else:
@@ -386,13 +394,14 @@ def mostrar_ventas():
         st.info("No hay ventas registradas")
         return
 
-    # Obtener total cobrado HOY
+    # ✅ Obtener total cobrado HOY (solo una vez, con zona horaria correcta)
     conn = conectar()
     cur = conn.cursor()
     cur.execute("""
         SELECT COALESCE(SUM(monto),0)
         FROM pagos
-        WHERE fecha::date = CURRENT_DATE
+        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
+              DATE(NOW() AT TIME ZONE 'America/Lima')
     """)
     total_cobrado = cur.fetchone()[0]
     conn.close()
@@ -405,6 +414,7 @@ def mostrar_ventas():
     col1.metric("Total Vendido", f"S/. {total_vendido:.2f}")
     col2.metric("Total Cobrado (Hoy)", f"S/. {total_cobrado:.2f}")
     col3.metric("Total Pendiente", f"S/. {total_pendiente:.2f}")
+
     for v in ventas:
         with st.container(border=True):
     
@@ -465,7 +475,6 @@ def mostrar_ventas():
                     eliminar_venta(v["id"])
     
             st.divider()
-
 @st.fragment
 def mostrar_estadisticas():
     conn = conectar()
@@ -474,13 +483,15 @@ def mostrar_estadisticas():
     cur.execute("""
         SELECT metodo, COUNT(*), COALESCE(SUM(monto),0)
         FROM pagos
-        WHERE fecha::date = CURRENT_DATE
+        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
+              DATE(NOW() AT TIME ZONE 'America/Lima')
         GROUP BY metodo
         ORDER BY SUM(monto) DESC
     """)
 
     resultados = cur.fetchall()
     conn.close()
+    
 
     st.subheader("📊 Métodos de pago más usados (Hoy)")
 
