@@ -528,11 +528,6 @@ with st.sidebar:
 # --------------------------------
 # INTERFAZ
 # --------------------------------
-st.title("Sistema Comercial - NSJ CAPROYECT")
-st.divider()
-# --------------------------------
-# INTERFAZ
-# --------------------------------
 
 st.title("Sistema Comercial - NSJ CAPROYECT")
 st.divider()
