@@ -490,32 +490,7 @@ def mostrar_estadisticas():
             st.divider()
     else:
         st.info("No hay pagos registrados hoy.")
-```
 
-## ¿Qué mejora?
-
-**Antes:**
-```
-📊 Métodos de pago más usados (Hoy)
-
-💳 Yape
-   • Cantidad de pagos: 2
-   • Total recibido: S/. 150.00
-```
-
-**Ahora:**
-```
-📊 Métodos de pago del día
-
-💰 Total cobrado hoy
-S/. 250.00
-
-### Desglose por método de pago:
-
-💳 Yape
-[███████████████░░░░░] 60%
-                        2 pagos
-                        S/. 150.00
 # --------------------------------
 # AUTO-REFRESH
 # --------------------------------
