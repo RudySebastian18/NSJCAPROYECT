@@ -382,15 +382,19 @@ def mostrar_ventas():
     conn = conectar()
     cur = conn.cursor()
     
-    # Total vendido HOY (todas las ventas del día)
+    # ✅ Obtener TODAS las ventas de hoy (cerradas y no cerradas)
     cur.execute("""
-        SELECT COALESCE(SUM(total),0)
+        SELECT id, total, pagado, saldo, cerrado
         FROM ventas
-        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
-              DATE(NOW() AT TIME ZONE 'America/Lima')
+        WHERE fecha::date = CURRENT_DATE
     """)
-    total_vendido = float(cur.fetchone()[0])
+    ventas_hoy_data = cur.fetchall()
     
+    # Calcular totales
+    total_vendido = sum(float(v[1]) for v in ventas_hoy_data)  # Suma de total
+    total_cobrado_calc = sum(float(v[2]) for v in ventas_hoy_data)  # Suma de pagado
+    total_pendiente = sum(float(v[3]) for v in ventas_hoy_data)  # Suma de saldo
+        
     # Total cobrado HOY (todos los pagos del día)
     cur.execute("""
         SELECT COALESCE(SUM(monto),0)
