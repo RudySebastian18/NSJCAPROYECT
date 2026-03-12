@@ -309,7 +309,37 @@ def eliminar_venta(id_venta):
     conn.close()
     st.session_state.mensaje_exito = "✅ Venta eliminada correctamente"
     st.rerun()
+def obtener_ventas_hoy():
+    """Ventas del día actual no cerradas"""
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
+        FROM ventas
+        WHERE cerrado = FALSE
+        AND DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
+            DATE(NOW() AT TIME ZONE 'America/Lima')
+        ORDER BY fecha DESC
+    """)
+    rows = cur.fetchall()
+    conn.close()
 
+    ventas = []
+    for r in rows:
+        fecha_peru = r[1].astimezone(ZoneInfo("America/Lima"))
+        ventas.append({
+            "id": r[0],
+            "Fecha": fecha_peru,
+            "Cliente": r[2],
+            "Producto": r[3],
+            "Total": float(r[4]),
+            "Pagado": float(r[5]),
+            "Saldo": float(r[6]),
+            "Estado": r[7],
+            "Método de pago": r[8],
+            "Entrega": r[9]
+        })
+    return ventas
 def obtener_todas_ventas():
     """Todas las ventas no cerradas (incluye días anteriores)"""
     return obtener_ventas()  # Usa la función existente
