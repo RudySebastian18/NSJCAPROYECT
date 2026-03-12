@@ -72,8 +72,8 @@ def registrar_venta(venta):
     # Insertar venta y obtener ID
     cur.execute("""
         INSERT INTO ventas
-        (cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        (cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega, fecha)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
     """, (
         venta["Cliente"],
@@ -83,8 +83,10 @@ def registrar_venta(venta):
         venta["Saldo"],
         venta["Estado"],
         venta["Método de pago"],
-        venta["Entrega"]
+        venta["Entrega"],
+        hora_peru()  # ✅ AGREGAR ESTO
     ))
+    
 
     venta_id = cur.fetchone()[0]
 
