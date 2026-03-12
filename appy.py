@@ -309,37 +309,6 @@ def eliminar_venta(id_venta):
     conn.close()
     st.session_state.mensaje_exito = "✅ Venta eliminada correctamente"
     st.rerun()
-def obtener_ventas_hoy():
-    """Ventas del día actual no cerradas"""
-    conn = conectar()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
-        FROM ventas
-        WHERE cerrado = FALSE
-        AND DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
-            DATE(NOW() AT TIME ZONE 'America/Lima')
-        ORDER BY fecha DESC
-    """)
-    rows = cur.fetchall()
-    conn.close()
-
-    ventas = []
-    for r in rows:
-        fecha_peru = r[1].astimezone(ZoneInfo("America/Lima"))
-        ventas.append({
-            "id": r[0],
-            "Fecha": fecha_peru,
-            "Cliente": r[2],
-            "Producto": r[3],
-            "Total": float(r[4]),
-            "Pagado": float(r[5]),
-            "Saldo": float(r[6]),
-            "Estado": r[7],
-            "Método de pago": r[8],
-            "Entrega": r[9]
-        })
-    return ventas
 
 def obtener_todas_ventas():
     """Todas las ventas no cerradas (incluye días anteriores)"""
@@ -377,24 +346,14 @@ def obtener_todas_ventas():
 
 @st.fragment
 def mostrar_ventas():
-    # ✅ Selector de filtro PRIMERO
-    filtro = st.radio(
-        "Mostrar ventas:",
-        ["Solo hoy", "Todas pendientes"],
-        horizontal=True
-    )
-    
-    # ✅ Obtener ventas según filtro
-    if filtro == "Solo hoy":
-        ventas = obtener_ventas_hoy()
-    else:
-        ventas = obtener_todas_ventas()
+    # ✅ Obtener solo ventas de HOY
+    ventas = obtener_ventas_hoy()
     
     if not ventas:
-        st.info("No hay ventas registradas")
+        st.info("No hay ventas registradas hoy")
         return
 
-    # ✅ Obtener total cobrado HOY (solo una vez, con zona horaria correcta)
+    # ✅ Obtener total cobrado HOY
     conn = conectar()
     cur = conn.cursor()
     cur.execute("""
@@ -406,14 +365,14 @@ def mostrar_ventas():
     total_cobrado = cur.fetchone()[0]
     conn.close()
 
-    # ✅ Calcular totales basados en las ventas filtradas
+    # ✅ Calcular totales de las ventas de hoy
     total_vendido = sum(v["Total"] for v in ventas)
     total_pendiente = sum(v["Saldo"] for v in ventas)
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total Vendido", f"S/. {total_vendido:.2f}")
+    col1.metric("Total Vendido (Hoy)", f"S/. {total_vendido:.2f}")
     col2.metric("Total Cobrado (Hoy)", f"S/. {total_cobrado:.2f}")
-    col3.metric("Total Pendiente", f"S/. {total_pendiente:.2f}")
+    col3.metric("Total Pendiente (Hoy)", f"S/. {total_pendiente:.2f}")
 
     for v in ventas:
         with st.container(border=True):
@@ -475,11 +434,14 @@ def mostrar_ventas():
                     eliminar_venta(v["id"])
     
             st.divider()
+
+
 @st.fragment
 def mostrar_estadisticas():
     conn = conectar()
     cur = conn.cursor()
-
+    
+    # ✅ Obtener totales por método de pago
     cur.execute("""
         SELECT metodo, COUNT(*), COALESCE(SUM(monto),0)
         FROM pagos
@@ -488,22 +450,72 @@ def mostrar_estadisticas():
         GROUP BY metodo
         ORDER BY SUM(monto) DESC
     """)
-
     resultados = cur.fetchall()
+    
+    # ✅ Calcular total general del día
+    cur.execute("""
+        SELECT COALESCE(SUM(monto),0)
+        FROM pagos
+        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
+              DATE(NOW() AT TIME ZONE 'America/Lima')
+    """)
+    total_general = cur.fetchone()[0]
+    
     conn.close()
     
-
-    st.subheader("📊 Métodos de pago más usados (Hoy)")
-
+    st.subheader("📊 Métodos de pago del día")
+    
+    # ✅ Mostrar total general primero
+    st.metric("💰 Total cobrado hoy", f"S/. {float(total_general):.2f}")
+    st.divider()
+    
     if resultados:
+        # ✅ Crear tabla visual con los métodos
+        st.markdown("### Desglose por método de pago:")
+        
         for metodo, cantidad, total in resultados:
-            st.write(f"💳 {metodo}")
-            st.write(f"   • Cantidad de pagos: {cantidad}")
-            st.write(f"   • Total recibido: S/. {total:.2f}")
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                porcentaje = (float(total) / float(total_general) * 100) if total_general > 0 else 0
+                st.write(f"**💳 {metodo}**")
+                st.progress(porcentaje / 100)
+                
+            with col2:
+                st.metric(
+                    label=f"{cantidad} pago{'s' if cantidad > 1 else ''}",
+                    value=f"S/. {float(total):.2f}"
+                )
+            
             st.divider()
     else:
         st.info("No hay pagos registrados hoy.")
+```
 
+## ¿Qué mejora?
+
+**Antes:**
+```
+📊 Métodos de pago más usados (Hoy)
+
+💳 Yape
+   • Cantidad de pagos: 2
+   • Total recibido: S/. 150.00
+```
+
+**Ahora:**
+```
+📊 Métodos de pago del día
+
+💰 Total cobrado hoy
+S/. 250.00
+
+### Desglose por método de pago:
+
+💳 Yape
+[███████████████░░░░░] 60%
+                        2 pagos
+                        S/. 150.00
 # --------------------------------
 # AUTO-REFRESH
 # --------------------------------
