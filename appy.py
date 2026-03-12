@@ -69,6 +69,9 @@ def registrar_venta(venta):
     conn = conectar()
     cur = conn.cursor()
 
+    # ✅ Obtener hora actual de Perú
+    fecha_peru = hora_peru()
+
     # Insertar venta y obtener ID
     cur.execute("""
         INSERT INTO ventas
@@ -84,9 +87,8 @@ def registrar_venta(venta):
         venta["Estado"],
         venta["Método de pago"],
         venta["Entrega"],
-        hora_peru()  # ✅ AGREGAR ESTO
+        fecha_peru  # ✅ Usar hora_peru() explícitamente
     ))
-    
 
     venta_id = cur.fetchone()[0]
 
@@ -97,7 +99,7 @@ def registrar_venta(venta):
             VALUES (%s, %s, %s, %s)
         """, (
             venta_id,
-            hora_peru(),
+            fecha_peru,  # ✅ Misma fecha
             venta["Pagado"],
             venta["Método de pago"]
         ))
@@ -105,10 +107,8 @@ def registrar_venta(venta):
     conn.commit()
     conn.close()
 
-    # ✅ GUARDAR MENSAJE EN SESSION STATE ANTES DEL RERUN
     st.session_state.mensaje_exito = f"✅ Venta #{venta_id} registrada correctamente"
     st.rerun()
-
 def completar_pago(id_venta, saldo_actual, metodo_pago):
     conn = conectar()
     cur = conn.cursor()
