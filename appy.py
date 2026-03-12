@@ -376,33 +376,56 @@ def obtener_todas_ventas():
 
 @st.fragment
 def mostrar_ventas():
-    # ✅ Obtener solo ventas de HOY
-    ventas = obtener_ventas_hoy()
-    
-    if not ventas:
-        st.info("No hay ventas registradas hoy")
-        return
-
-    # ✅ Obtener total cobrado HOY
+    # ✅ Obtener TODAS las ventas de hoy (cerradas y no cerradas)
     conn = conectar()
     cur = conn.cursor()
+    
+    # Total vendido HOY (todas las ventas del día)
+    cur.execute("""
+        SELECT COALESCE(SUM(total),0)
+        FROM ventas
+        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
+              DATE(NOW() AT TIME ZONE 'America/Lima')
+    """)
+    total_vendido = float(cur.fetchone()[0])
+    
+    # Total cobrado HOY (todos los pagos del día)
     cur.execute("""
         SELECT COALESCE(SUM(monto),0)
         FROM pagos
         WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
               DATE(NOW() AT TIME ZONE 'America/Lima')
     """)
-    total_cobrado = cur.fetchone()[0]
+    total_cobrado = float(cur.fetchone()[0])
+    
+    # Total pendiente HOY (saldo de ventas del día)
+    cur.execute("""
+        SELECT COALESCE(SUM(saldo),0)
+        FROM ventas
+        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
+              DATE(NOW() AT TIME ZONE 'America/Lima')
+    """)
+    total_pendiente = float(cur.fetchone()[0])
+    
     conn.close()
-
-    # ✅ Calcular totales de las ventas de hoy
-    total_vendido = sum(v["Total"] for v in ventas)
-    total_pendiente = sum(v["Saldo"] for v in ventas)
-
+    
+    # Obtener solo ventas NO cerradas de hoy para mostrar
+    ventas = obtener_ventas_hoy()
+    
+    # Mostrar métricas
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Vendido (Hoy)", f"S/. {total_vendido:.2f}")
     col2.metric("Total Cobrado (Hoy)", f"S/. {total_cobrado:.2f}")
     col3.metric("Total Pendiente (Hoy)", f"S/. {total_pendiente:.2f}")
+    
+    st.divider()
+    
+    # Mostrar ventas pendientes
+    if not ventas:
+        st.info("✅ No hay ventas pendientes hoy")
+        return
+
+    st.subheader("📋 Ventas Pendientes")
 
     for v in ventas:
         with st.container(border=True):
@@ -464,8 +487,6 @@ def mostrar_ventas():
                     eliminar_venta(v["id"])
     
             st.divider()
-
-
 @st.fragment
 def mostrar_estadisticas():
     conn = conectar()
