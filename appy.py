@@ -1,5 +1,6 @@
 import streamlit as st
 import psycopg2
+import psycopg2.pool
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from io import BytesIO
@@ -17,16 +18,26 @@ from reportlab.lib.units import inch
 st.set_page_config(page_title="Sistema Comercial - NSJ CAPROYECT", layout="wide")
 
 # --------------------------------
-# CONEXIÓN BD
+# CONEXIÓN BD CON POOL
 # --------------------------------
-def conectar():
-    return psycopg2.connect(
+@st.cache_resource
+def get_connection_pool():
+    return psycopg2.pool.SimpleConnectionPool(
+        1, 5,
         host=st.secrets["DB_HOST"],
         database=st.secrets["DB_NAME"],
         user=st.secrets["DB_USER"],
         password=st.secrets["DB_PASSWORD"],
         port=st.secrets["DB_PORT"]
     )
+
+def conectar():
+    pool = get_connection_pool()
+    return pool.getconn()
+
+def liberar_conexion(conn):
+    pool = get_connection_pool()
+    pool.putconn(conn)
 
 # --------------------------------
 # FUNCIONES BD
@@ -36,153 +47,160 @@ def hora_peru():
 
 def registrar_venta(venta):
     conn = conectar()
-    cur = conn.cursor()
-    fecha_peru = hora_peru()
+    try:
+        cur = conn.cursor()
+        fecha_peru = hora_peru()
 
-    cur.execute("""
-        INSERT INTO ventas
-        (cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega, fecha)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        RETURNING id
-    """, (
-        venta["Cliente"],
-        venta["Producto"],
-        venta["Total"],
-        venta["Pagado"],
-        venta["Saldo"],
-        venta["Estado"],
-        venta["Método de pago"],
-        venta["Entrega"],
-        fecha_peru
-    ))
-
-    venta_id = cur.fetchone()[0]
-
-    if venta["Pagado"] > 0:
         cur.execute("""
-            INSERT INTO pagos (venta_id, fecha, monto, metodo)
-            VALUES (%s, %s, %s, %s)
-        """, (venta_id, fecha_peru, venta["Pagado"], venta["Método de pago"]))
+            INSERT INTO ventas
+            (cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega, fecha)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            venta["Cliente"], venta["Producto"], venta["Total"],
+            venta["Pagado"], venta["Saldo"], venta["Estado"],
+            venta["Método de pago"], venta["Entrega"], fecha_peru
+        ))
 
-    conn.commit()
-    conn.close()
-    st.session_state.mensaje_exito = f"✅ Venta #{venta_id} registrada correctamente"
+        venta_id = cur.fetchone()[0]
+
+        if venta["Pagado"] > 0:
+            cur.execute("""
+                INSERT INTO pagos (venta_id, fecha, monto, metodo)
+                VALUES (%s, %s, %s, %s)
+            """, (venta_id, fecha_peru, venta["Pagado"], venta["Método de pago"]))
+
+        conn.commit()
+        st.session_state.mensaje_exito = f"✅ Venta #{venta_id} registrada correctamente"
+    finally:
+        liberar_conexion(conn)
     st.rerun()
 
 def completar_pago(id_venta, saldo_actual, metodo_pago):
     conn = conectar()
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO pagos (venta_id, fecha, monto, metodo)
+            VALUES (%s, %s, %s, %s)
+        """, (id_venta, hora_peru(), saldo_actual, metodo_pago))
 
-    cur.execute("""
-        INSERT INTO pagos (venta_id, fecha, monto, metodo)
-        VALUES (%s, %s, %s, %s)
-    """, (id_venta, hora_peru(), saldo_actual, metodo_pago))
+        cur.execute("""
+            UPDATE ventas
+            SET pagado = pagado + %s, saldo = 0, estado = 'Pagado'
+            WHERE id = %s
+        """, (saldo_actual, id_venta))
 
-    cur.execute("""
-        UPDATE ventas
-        SET pagado = pagado + %s, saldo = 0, estado = 'Pagado'
-        WHERE id = %s
-    """, (saldo_actual, id_venta))
-
-    conn.commit()
-    conn.close()
-    st.session_state.mensaje_exito = f"✅ Pago completado correctamente (S/. {saldo_actual:.2f})"
+        conn.commit()
+        st.session_state.mensaje_exito = f"✅ Pago completado correctamente (S/. {saldo_actual:.2f})"
+    finally:
+        liberar_conexion(conn)
     st.rerun()
 
 def marcar_entrega(id_venta, estado):
     conn = conectar()
-    cur = conn.cursor()
-    cur.execute("UPDATE ventas SET entrega=%s WHERE id=%s", (estado, id_venta))
-    conn.commit()
-    conn.close()
-    st.session_state.mensaje_exito = f"✅ Entrega marcada como: {estado}"
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE ventas SET entrega=%s WHERE id=%s", (estado, id_venta))
+        conn.commit()
+        st.session_state.mensaje_exito = f"✅ Entrega marcada como: {estado}"
+    finally:
+        liberar_conexion(conn)
     st.rerun()
 
 def eliminar_venta(id_venta):
     conn = conectar()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM pagos WHERE venta_id=%s", (id_venta,))
-    cur.execute("DELETE FROM ventas WHERE id=%s", (id_venta,))
-    conn.commit()
-    conn.close()
-    st.session_state.mensaje_exito = "✅ Venta eliminada correctamente"
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM pagos WHERE venta_id=%s", (id_venta,))
+        cur.execute("DELETE FROM ventas WHERE id=%s", (id_venta,))
+        conn.commit()
+        st.session_state.mensaje_exito = "✅ Venta eliminada correctamente"
+    finally:
+        liberar_conexion(conn)
     st.rerun()
 
 def cierre_de_caja(usuario_actual):
     conn = conectar()
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
-    cur.execute("""
-        SELECT id FROM ventas
-        WHERE cerrado = FALSE AND entrega = 'Entregado' AND saldo = 0
-    """)
-    ventas_ids = cur.fetchall()
+        cur.execute("""
+            SELECT id FROM ventas
+            WHERE cerrado = FALSE AND entrega = 'Entregado' AND saldo = 0
+        """)
+        ventas_ids = cur.fetchall()
 
-    if not ventas_ids:
-        conn.close()
-        return False
+        if not ventas_ids:
+            return False
 
-    ids = [v[0] for v in ventas_ids]
-    
-    cur.execute("""
-        SELECT p.metodo, COALESCE(SUM(p.monto), 0) as total
-        FROM pagos p
-        WHERE p.venta_id = ANY(%s)
-        GROUP BY p.metodo
-    """, (ids,))
-    
-    pagos_por_metodo = cur.fetchall()
+        ids = [v[0] for v in ventas_ids]
+        
+        cur.execute("""
+            SELECT p.metodo, COALESCE(SUM(p.monto), 0) as total
+            FROM pagos p
+            WHERE p.venta_id = ANY(%s)
+            GROUP BY p.metodo
+        """, (ids,))
+        
+        pagos_por_metodo = cur.fetchall()
 
-    totales_metodo = {"Efectivo": 0, "Yape": 0, "Plin": 0, "Transferencia": 0}
-    total_general = 0
-    
-    for metodo, monto in pagos_por_metodo:
-        monto_float = float(monto)
-        total_general += monto_float
-        if metodo in totales_metodo:
-            totales_metodo[metodo] += monto_float
+        totales_metodo = {"Efectivo": 0, "Yape": 0, "Plin": 0, "Transferencia": 0}
+        total_general = 0
+        
+        for metodo, monto in pagos_por_metodo:
+            monto_float = float(monto)
+            total_general += monto_float
+            if metodo in totales_metodo:
+                totales_metodo[metodo] += monto_float
 
-    cur.execute("""
-        INSERT INTO cierres_caja
-        (fecha, total_general, total_efectivo, total_yape, total_plin, total_transferencia, usuario)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
-    """, (
-        hora_peru().date(), total_general,
-        totales_metodo["Efectivo"], totales_metodo["Yape"],
-        totales_metodo["Plin"], totales_metodo["Transferencia"],
-        usuario_actual
-    ))
+        cur.execute("""
+            INSERT INTO cierres_caja
+            (fecha, total_general, total_efectivo, total_yape, total_plin, total_transferencia, usuario)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (
+            hora_peru().date(), total_general,
+            totales_metodo["Efectivo"], totales_metodo["Yape"],
+            totales_metodo["Plin"], totales_metodo["Transferencia"],
+            usuario_actual
+        ))
 
-    cur.execute("UPDATE ventas SET cerrado = TRUE WHERE id = ANY(%s)", (ids,))
-    conn.commit()
-    conn.close()
-    st.session_state.mensaje_exito = f"✅ Cierre realizado: S/. {total_general:.2f}"
-    return True
+        cur.execute("UPDATE ventas SET cerrado = TRUE WHERE id = ANY(%s)", (ids,))
+        conn.commit()
+        st.session_state.mensaje_exito = f"✅ Cierre realizado: S/. {total_general:.2f}"
+        return True
+    finally:
+        liberar_conexion(conn)
 
+@st.cache_data(ttl=60)
 def obtener_cierres():
     conn = conectar()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT fecha, total_general, total_efectivo, total_yape, total_plin,
-               total_transferencia, usuario, created_at
-        FROM cierres_caja
-        ORDER BY created_at DESC
-    """)
-    data = cur.fetchall()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT fecha, total_general, total_efectivo, total_yape, total_plin,
+                   total_transferencia, usuario, created_at
+            FROM cierres_caja
+            ORDER BY created_at DESC
+        """)
+        data = cur.fetchall()
+    finally:
+        liberar_conexion(conn)
     return data
 
 def obtener_ventas():
     conn = conectar()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
-        FROM ventas
-        WHERE cerrado = FALSE
-        ORDER BY fecha DESC
-    """)
-    rows = cur.fetchall()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
+            FROM ventas
+            WHERE cerrado = FALSE
+            ORDER BY fecha DESC
+        """)
+        rows = cur.fetchall()
+    finally:
+        liberar_conexion(conn)
 
     ventas = []
     for r in rows:
@@ -200,42 +218,36 @@ def obtener_ventas():
 @st.fragment
 def mostrar_ventas():
     conn = conectar()
-    cur = conn.cursor()
-    
-    # Total vendido HOY
-    cur.execute("""
-        SELECT COALESCE(SUM(total),0)
-        FROM ventas
-        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
-    """)
-    total_vendido = float(cur.fetchone()[0])
-    
-    # Total cobrado HOY
-    cur.execute("""
-        SELECT COALESCE(SUM(monto),0)
-        FROM pagos
-        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
-    """)
-    total_cobrado = float(cur.fetchone()[0])
-    
-    # Total pendiente HOY
-    cur.execute("""
-        SELECT COALESCE(SUM(saldo),0)
-        FROM ventas
-        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
-    """)
-    total_pendiente = float(cur.fetchone()[0])
-    
-    # Ventas no cerradas de hoy
-    cur.execute("""
-        SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
-        FROM ventas
-        WHERE cerrado = FALSE
-        AND DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
-        ORDER BY fecha DESC
-    """)
-    rows = cur.fetchall()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        
+        # Consulta optimizada: todo en una
+        cur.execute("""
+            SELECT 
+                (SELECT COALESCE(SUM(total),0) FROM ventas 
+                 WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE) as total_vendido,
+                (SELECT COALESCE(SUM(monto),0) FROM pagos 
+                 WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE) as total_cobrado,
+                (SELECT COALESCE(SUM(saldo),0) FROM ventas 
+                 WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE) as total_pendiente
+        """)
+        
+        totales = cur.fetchone()
+        total_vendido = float(totales[0])
+        total_cobrado = float(totales[1])
+        total_pendiente = float(totales[2])
+        
+        # Ventas no cerradas de hoy
+        cur.execute("""
+            SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
+            FROM ventas
+            WHERE cerrado = FALSE
+            AND DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+            ORDER BY fecha DESC
+        """)
+        rows = cur.fetchall()
+    finally:
+        liberar_conexion(conn)
 
     ventas = []
     for r in rows:
@@ -305,21 +317,22 @@ def mostrar_ventas():
                     eliminar_venta(v["id"])
     
             st.divider()
+
 @st.fragment
 def mostrar_ventas_anteriores():
     conn = conectar()
-    cur = conn.cursor()
-    
-    # Ventas NO cerradas de días anteriores
-    cur.execute("""
-        SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
-        FROM ventas
-        WHERE cerrado = FALSE
-        AND DATE(fecha AT TIME ZONE 'America/Lima') < CURRENT_DATE
-        ORDER BY fecha DESC
-    """)
-    rows = cur.fetchall()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
+            FROM ventas
+            WHERE cerrado = FALSE
+            AND DATE(fecha AT TIME ZONE 'America/Lima') < CURRENT_DATE
+            ORDER BY fecha DESC
+        """)
+        rows = cur.fetchall()
+    finally:
+        liberar_conexion(conn)
 
     ventas = []
     for r in rows:
@@ -384,27 +397,30 @@ def mostrar_ventas_anteriores():
                     eliminar_venta(v["id"])
     
             st.divider()
+
 @st.fragment
 def mostrar_estadisticas():
     conn = conectar()
-    cur = conn.cursor()
-    
-    cur.execute("""
-        SELECT metodo, COUNT(*), COALESCE(SUM(monto),0)
-        FROM pagos
-        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
-        GROUP BY metodo
-        ORDER BY SUM(monto) DESC
-    """)
-    resultados = cur.fetchall()
-    
-    cur.execute("""
-        SELECT COALESCE(SUM(monto),0)
-        FROM pagos
-        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
-    """)
-    total_general = cur.fetchone()[0]
-    conn.close()
+    try:
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT metodo, COUNT(*), COALESCE(SUM(monto),0)
+            FROM pagos
+            WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+            GROUP BY metodo
+            ORDER BY SUM(monto) DESC
+        """)
+        resultados = cur.fetchall()
+        
+        cur.execute("""
+            SELECT COALESCE(SUM(monto),0)
+            FROM pagos
+            WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+        """)
+        total_general = cur.fetchone()[0]
+    finally:
+        liberar_conexion(conn)
     
     st.subheader("📊 Métodos de pago del día")
     st.metric("💰 Total cobrado hoy", f"S/. {float(total_general):.2f}")
@@ -429,11 +445,11 @@ def mostrar_estadisticas():
 # --------------------------------
 with st.sidebar:
     st.markdown("### ⚙️ Configuración")
-    auto_refresh = st.checkbox("🔄 Auto-actualizar cada 3s", value=False)
+    auto_refresh = st.checkbox("🔄 Auto-actualizar cada 5s", value=False)
     if st.button("🔄 Actualizar ahora", use_container_width=True):
         st.rerun()
     if auto_refresh:
-        time.sleep(3)
+        time.sleep(5)
         st.rerun()
     st.divider()
     st.caption(f"Última actualización: {hora_peru().strftime('%H:%M:%S')}")
@@ -484,13 +500,14 @@ with tab_venta:
         })
 
 # ======================================
-# VENTAS
+# VENTAS HOY
 # ======================================
 with tab_ventas:
     if "mensaje_exito" in st.session_state:
         st.success(st.session_state.mensaje_exito)
         del st.session_state.mensaje_exito
     mostrar_ventas()
+
 # ======================================
 # VENTAS ANTERIORES
 # ======================================
@@ -499,6 +516,7 @@ with tab_anteriores:
         st.success(st.session_state.mensaje_exito)
         del st.session_state.mensaje_exito
     mostrar_ventas_anteriores()
+
 # ======================================
 # ESTADÍSTICAS
 # ======================================
