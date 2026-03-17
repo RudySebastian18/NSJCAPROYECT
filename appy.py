@@ -3,17 +3,18 @@ import psycopg2
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from io import BytesIO
-import os  # 👈 AGREGA ESTA LÍNEA
+import os
+import time
 
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 
-
 # --------------------------------
 # CONFIG
 # --------------------------------
+st.set_page_config(page_title="Sistema Comercial - NSJ CAPROYECT", layout="wide")
 
 # --------------------------------
 # CONEXIÓN BD
@@ -27,52 +28,17 @@ def conectar():
         port=st.secrets["DB_PORT"]
     )
 
-
 # --------------------------------
 # FUNCIONES BD
 # --------------------------------
 def hora_peru():
     return datetime.now(ZoneInfo("America/Lima"))
-    
-def obtener_ventas():
-    conn = conectar()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
-        FROM ventas
-        WHERE cerrado = FALSE
-        ORDER BY fecha DESC
-    """)
-
-    rows = cur.fetchall()
-    conn.close()
-
-    ventas = []
-    for r in rows:
-        from zoneinfo import ZoneInfo
-        fecha_peru = r[1].astimezone(ZoneInfo("America/Lima"))
-        ventas.append({
-            "id": r[0],
-            "Fecha": fecha_peru,
-            "Cliente": r[2],
-            "Producto": r[3],
-            "Total": float(r[4]),
-            "Pagado": float(r[5]),
-            "Saldo": float(r[6]),
-            "Estado": r[7],
-            "Método de pago": r[8],
-            "Entrega": r[9]
-        })
-    return ventas
 
 def registrar_venta(venta):
     conn = conectar()
     cur = conn.cursor()
-
-    # ✅ Obtener hora actual de Perú
     fecha_peru = hora_peru()
 
-    # Insertar venta y obtener ID
     cur.execute("""
         INSERT INTO ventas
         (cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega, fecha)
@@ -87,49 +53,34 @@ def registrar_venta(venta):
         venta["Estado"],
         venta["Método de pago"],
         venta["Entrega"],
-        fecha_peru  # ✅ Usar hora_peru() explícitamente
+        fecha_peru
     ))
 
     venta_id = cur.fetchone()[0]
 
-    # 🔥 REGISTRAR PAGO REAL SOLO SI SE PAGÓ ALGO
     if venta["Pagado"] > 0:
         cur.execute("""
             INSERT INTO pagos (venta_id, fecha, monto, metodo)
             VALUES (%s, %s, %s, %s)
-        """, (
-            venta_id,
-            fecha_peru,  # ✅ Misma fecha
-            venta["Pagado"],
-            venta["Método de pago"]
-        ))
+        """, (venta_id, fecha_peru, venta["Pagado"], venta["Método de pago"]))
 
     conn.commit()
     conn.close()
-
     st.session_state.mensaje_exito = f"✅ Venta #{venta_id} registrada correctamente"
     st.rerun()
+
 def completar_pago(id_venta, saldo_actual, metodo_pago):
     conn = conectar()
     cur = conn.cursor()
 
-    # Insertar pago
     cur.execute("""
-    INSERT INTO pagos (venta_id, fecha, monto, metodo)
-    VALUES (%s, %s, %s, %s)
-    """, (
-        id_venta,
-        hora_peru(),
-        saldo_actual,
-        metodo_pago  # ✅ AHORA USA EL MÉTODO ELEGIDO
-    ))
+        INSERT INTO pagos (venta_id, fecha, monto, metodo)
+        VALUES (%s, %s, %s, %s)
+    """, (id_venta, hora_peru(), saldo_actual, metodo_pago))
 
-    # Actualizar venta
     cur.execute("""
         UPDATE ventas
-        SET pagado = pagado + %s,
-            saldo = 0,
-            estado = 'Pagado'
+        SET pagado = pagado + %s, saldo = 0, estado = 'Pagado'
         WHERE id = %s
     """, (saldo_actual, id_venta))
 
@@ -144,19 +95,26 @@ def marcar_entrega(id_venta, estado):
     cur.execute("UPDATE ventas SET entrega=%s WHERE id=%s", (estado, id_venta))
     conn.commit()
     conn.close()
+    st.session_state.mensaje_exito = f"✅ Entrega marcada como: {estado}"
     st.rerun()
-    
+
+def eliminar_venta(id_venta):
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM pagos WHERE venta_id=%s", (id_venta,))
+    cur.execute("DELETE FROM ventas WHERE id=%s", (id_venta,))
+    conn.commit()
+    conn.close()
+    st.session_state.mensaje_exito = "✅ Venta eliminada correctamente"
+    st.rerun()
+
 def cierre_de_caja(usuario_actual):
     conn = conectar()
     cur = conn.cursor()
 
-    # ✅ OBTENER VENTAS CERRABLES
     cur.execute("""
-        SELECT id
-        FROM ventas
-        WHERE cerrado = FALSE
-        AND entrega = 'Entregado'
-        AND saldo = 0
+        SELECT id FROM ventas
+        WHERE cerrado = FALSE AND entrega = 'Entregado' AND saldo = 0
     """)
     ventas_ids = cur.fetchall()
 
@@ -164,13 +122,10 @@ def cierre_de_caja(usuario_actual):
         conn.close()
         return False
 
-    # ✅ OBTENER PAGOS AGRUPADOS POR MÉTODO (DE LA TABLA PAGOS)
     ids = [v[0] for v in ventas_ids]
     
     cur.execute("""
-        SELECT 
-            p.metodo,
-            COALESCE(SUM(p.monto), 0) as total
+        SELECT p.metodo, COALESCE(SUM(p.monto), 0) as total
         FROM pagos p
         WHERE p.venta_id = ANY(%s)
         GROUP BY p.metodo
@@ -178,14 +133,7 @@ def cierre_de_caja(usuario_actual):
     
     pagos_por_metodo = cur.fetchall()
 
-    # ✅ CALCULAR TOTALES POR MÉTODO
-    totales_metodo = {
-        "Efectivo": 0,
-        "Yape": 0,
-        "Plin": 0,
-        "Transferencia": 0
-    }
-    
+    totales_metodo = {"Efectivo": 0, "Yape": 0, "Plin": 0, "Transferencia": 0}
     total_general = 0
     
     for metodo, monto in pagos_por_metodo:
@@ -194,40 +142,29 @@ def cierre_de_caja(usuario_actual):
         if metodo in totales_metodo:
             totales_metodo[metodo] += monto_float
 
-    # Insertar cierre
     cur.execute("""
         INSERT INTO cierres_caja
         (fecha, total_general, total_efectivo, total_yape, total_plin, total_transferencia, usuario)
         VALUES (%s, %s, %s, %s, %s, %s, %s)
     """, (
-        hora_peru().date(),
-        total_general,
-        totales_metodo["Efectivo"],
-        totales_metodo["Yape"],
-        totales_metodo["Plin"],
-        totales_metodo["Transferencia"],
+        hora_peru().date(), total_general,
+        totales_metodo["Efectivo"], totales_metodo["Yape"],
+        totales_metodo["Plin"], totales_metodo["Transferencia"],
         usuario_actual
     ))
 
-    # Marcar ventas como cerradas
-    cur.execute("""
-        UPDATE ventas
-        SET cerrado = TRUE
-        WHERE id = ANY(%s)
-    """, (ids,))
-
+    cur.execute("UPDATE ventas SET cerrado = TRUE WHERE id = ANY(%s)", (ids,))
     conn.commit()
     conn.close()
-    
     st.session_state.mensaje_exito = f"✅ Cierre realizado: S/. {total_general:.2f}"
     return True
+
 def obtener_cierres():
     conn = conectar()
     cur = conn.cursor()
     cur.execute("""
-        SELECT fecha, total_general, total_efectivo,
-               total_yape, total_plin, total_transferencia,
-               usuario, created_at
+        SELECT fecha, total_general, total_efectivo, total_yape, total_plin,
+               total_transferencia, usuario, created_at
         FROM cierres_caja
         ORDER BY created_at DESC
     """)
@@ -235,116 +172,7 @@ def obtener_cierres():
     conn.close()
     return data
 
-def total_vendido_hoy():
-    conn = conectar()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT COALESCE(SUM(total),0)
-        FROM ventas
-        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
-              DATE(NOW() AT TIME ZONE 'America/Lima')
-    """)
-    total = cur.fetchone()[0]
-    conn.close()
-    return total
-
-
-def total_cobrado_hoy():
-    conn = conectar()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT COALESCE(SUM(monto),0)
-        FROM pagos
-        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
-              DATE(NOW() AT TIME ZONE 'America/Lima')
-    """)
-    total = cur.fetchone()[0]
-    conn.close()
-    return float(total)
-
-
-
-def total_pendiente_hoy():
-    conn = conectar()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT COALESCE(SUM(saldo),0)
-        FROM ventas
-        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
-              DATE(NOW() AT TIME ZONE 'America/Lima')
-    """)
-    total = cur.fetchone()[0]
-    conn.close()
-    return total
-
-def obtener_pagos_del_dia():
-    conn = conectar()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT monto, metodo
-        FROM pagos
-        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
-              DATE(NOW() AT TIME ZONE 'America/Lima')
-    """)
-    rows = cur.fetchall()
-    conn.close()
-    return rows
-    
-def marcar_entrega(id_venta, estado):
-    conn = conectar()
-    cur = conn.cursor()
-    cur.execute("UPDATE ventas SET entrega=%s WHERE id=%s", (estado, id_venta))
-    conn.commit()
-    conn.close()
-    st.session_state.mensaje_exito = f"✅ Entrega marcada como: {estado}"
-    st.rerun()
-
-def eliminar_venta(id_venta):
-    conn = conectar()
-    cur = conn.cursor()
-    
-    # Eliminar pagos relacionados primero
-    cur.execute("DELETE FROM pagos WHERE venta_id=%s", (id_venta,))
-    cur.execute("DELETE FROM ventas WHERE id=%s", (id_venta,))
-    
-    conn.commit()
-    conn.close()
-    st.session_state.mensaje_exito = "✅ Venta eliminada correctamente"
-    st.rerun()
-def obtener_ventas_hoy():
-    """Ventas del día actual no cerradas"""
-    conn = conectar()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
-        FROM ventas
-        WHERE cerrado = FALSE
-        AND DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
-            DATE(NOW() AT TIME ZONE 'America/Lima')
-        ORDER BY fecha DESC
-    """)
-    rows = cur.fetchall()
-    conn.close()
-
-    ventas = []
-    for r in rows:
-        fecha_peru = r[1].astimezone(ZoneInfo("America/Lima"))
-        ventas.append({
-            "id": r[0],
-            "Fecha": fecha_peru,
-            "Cliente": r[2],
-            "Producto": r[3],
-            "Total": float(r[4]),
-            "Pagado": float(r[5]),
-            "Saldo": float(r[6]),
-            "Estado": r[7],
-            "Método de pago": r[8],
-            "Entrega": r[9]
-        })
-    return ventas
-def obtener_todas_ventas():
-    """Todas las ventas no cerradas (incluye días anteriores)"""
-    return obtener_ventas()  # Usa la función existente
+def obtener_ventas():
     conn = conectar()
     cur = conn.cursor()
     cur.execute("""
@@ -360,73 +188,71 @@ def obtener_todas_ventas():
     for r in rows:
         fecha_peru = r[1].astimezone(ZoneInfo("America/Lima"))
         ventas.append({
-            "id": r[0],
-            "Fecha": fecha_peru,
-            "Cliente": r[2],
-            "Producto": r[3],
-            "Total": float(r[4]),
-            "Pagado": float(r[5]),
-            "Saldo": float(r[6]),
-            "Estado": r[7],
-            "Método de pago": r[8],
-            "Entrega": r[9]
+            "id": r[0], "Fecha": fecha_peru, "Cliente": r[2], "Producto": r[3],
+            "Total": float(r[4]), "Pagado": float(r[5]), "Saldo": float(r[6]),
+            "Estado": r[7], "Método de pago": r[8], "Entrega": r[9]
         })
     return ventas
+
 # --------------------------------
 # FRAGMENTOS OPTIMIZADOS
 # --------------------------------
-
 @st.fragment
 def mostrar_ventas():
-    # ✅ Obtener TODAS las ventas de hoy (cerradas y no cerradas)
     conn = conectar()
     cur = conn.cursor()
     
-    # ✅ Obtener TODAS las ventas de hoy (cerradas y no cerradas)
+    # Total vendido HOY
     cur.execute("""
-        SELECT id, total, pagado, saldo, cerrado
+        SELECT COALESCE(SUM(total),0)
         FROM ventas
-        WHERE fecha::date = CURRENT_DATE
+        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
     """)
-    ventas_hoy_data = cur.fetchall()
+    total_vendido = float(cur.fetchone()[0])
     
-    # Calcular totales
-    total_vendido = sum(float(v[1]) for v in ventas_hoy_data)  # Suma de total
-    total_cobrado_calc = sum(float(v[2]) for v in ventas_hoy_data)  # Suma de pagado
-    total_pendiente = sum(float(v[3]) for v in ventas_hoy_data)  # Suma de saldo
-        
-    # Total cobrado HOY (todos los pagos del día)
+    # Total cobrado HOY
     cur.execute("""
         SELECT COALESCE(SUM(monto),0)
         FROM pagos
-        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
-              DATE(NOW() AT TIME ZONE 'America/Lima')
+        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
     """)
     total_cobrado = float(cur.fetchone()[0])
     
-    # Total pendiente HOY (saldo de ventas del día)
+    # Total pendiente HOY
     cur.execute("""
         SELECT COALESCE(SUM(saldo),0)
         FROM ventas
-        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
-              DATE(NOW() AT TIME ZONE 'America/Lima')
+        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
     """)
     total_pendiente = float(cur.fetchone()[0])
     
+    # Ventas no cerradas de hoy
+    cur.execute("""
+        SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
+        FROM ventas
+        WHERE cerrado = FALSE
+        AND DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+        ORDER BY fecha DESC
+    """)
+    rows = cur.fetchall()
     conn.close()
+
+    ventas = []
+    for r in rows:
+        fecha_peru = r[1].astimezone(ZoneInfo("America/Lima"))
+        ventas.append({
+            "id": r[0], "Fecha": fecha_peru, "Cliente": r[2], "Producto": r[3],
+            "Total": float(r[4]), "Pagado": float(r[5]), "Saldo": float(r[6]),
+            "Estado": r[7], "Método de pago": r[8], "Entrega": r[9]
+        })
     
-    # Obtener solo ventas NO cerradas de hoy para mostrar
-    ventas = obtener_ventas_hoy()
-    
-    # Mostrar métricas
+    # Métricas
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Vendido (Hoy)", f"S/. {total_vendido:.2f}")
     col2.metric("Total Cobrado (Hoy)", f"S/. {total_cobrado:.2f}")
     col3.metric("Total Pendiente (Hoy)", f"S/. {total_pendiente:.2f}")
-    
     st.divider()
     
-    # Mostrar ventas pendientes
     if not ventas:
         st.info("✅ No hay ventas pendientes hoy")
         return
@@ -435,115 +261,87 @@ def mostrar_ventas():
 
     for v in ventas:
         with st.container(border=True):
-    
             st.markdown(f"### 🧾 Pedido #{v['id']}")
-    
             st.write(f"📅 Fecha: {v['Fecha'].strftime('%d/%m/%Y %H:%M')}")
             
             col1, col2 = st.columns(2)
-    
             with col1:
                 st.write(f"👤 Cliente: {v['Cliente']}")
                 st.write(f"📦 Producto: {v['Producto']}")
                 st.write(f"💳 Método de pago inicial: {v['Método de pago']}")
-    
             with col2:
                 st.write(f"💰 Total: S/. {v['Total']:.2f}")
                 st.write(f"💵 Pagado: S/. {v['Pagado']:.2f}")
                 st.write(f"🧾 Saldo: S/. {v['Saldo']:.2f}")
     
-            # Estado de pago
             if v["Saldo"] > 0:
                 st.warning(f"⚠️ Adelanto recibido. Falta pagar: S/. {v['Saldo']:.2f}")
             else:
                 st.success("✅ Pagado completamente")
     
-            # Estado de entrega
             if v["Entrega"] == "Pendiente":
                 st.info("🚚 Entrega pendiente")
             else:
                 st.success("📦 Pedido entregado")
     
-            # BOTONES DE ACCIÓN
             colA, colB, colC = st.columns(3)
     
-            # Completar pago
             if v["Saldo"] > 0:
                 with colA:
                     popover = st.popover("💵 Completar pago")
                     with popover:
                         st.write(f"**Saldo pendiente:** S/. {v['Saldo']:.2f}")
-                        metodo_completar = st.selectbox(
-                            "Método de pago",
-                            METODOS_PAGO,
-                            key=f"metodo_pago_{v['id']}"
-                        )
+                        metodo_completar = st.selectbox("Método de pago", METODOS_PAGO, key=f"metodo_pago_{v['id']}")
                         if st.button("✅ Confirmar pago", key=f"confirmar_{v['id']}", type="primary"):
                             completar_pago(v["id"], v["Saldo"], metodo_completar)
     
-            # Marcar entrega
             with colB:
                 nuevo_estado = "Entregado" if v["Entrega"] == "Pendiente" else "Pendiente"
                 if st.button(f"🚚 Marcar {nuevo_estado}", key=f"ent_{v['id']}"):
                     marcar_entrega(v["id"], nuevo_estado)
     
-            # Eliminar
             with colC:
                 if st.button("🗑 Eliminar", key=f"del_{v['id']}"):
                     eliminar_venta(v["id"])
     
             st.divider()
+
 @st.fragment
 def mostrar_estadisticas():
     conn = conectar()
     cur = conn.cursor()
     
-    # ✅ Obtener totales por método de pago
     cur.execute("""
         SELECT metodo, COUNT(*), COALESCE(SUM(monto),0)
         FROM pagos
-        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
-              DATE(NOW() AT TIME ZONE 'America/Lima')
+        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
         GROUP BY metodo
         ORDER BY SUM(monto) DESC
     """)
     resultados = cur.fetchall()
     
-    # ✅ Calcular total general del día
     cur.execute("""
         SELECT COALESCE(SUM(monto),0)
         FROM pagos
-        WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
-              DATE(NOW() AT TIME ZONE 'America/Lima')
+        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
     """)
     total_general = cur.fetchone()[0]
-    
     conn.close()
     
     st.subheader("📊 Métodos de pago del día")
-    
-    # ✅ Mostrar total general primero
     st.metric("💰 Total cobrado hoy", f"S/. {float(total_general):.2f}")
     st.divider()
     
     if resultados:
-        # ✅ Crear tabla visual con los métodos
         st.markdown("### Desglose por método de pago:")
-        
         for metodo, cantidad, total in resultados:
             col1, col2 = st.columns([2, 1])
-            
             with col1:
                 porcentaje = (float(total) / float(total_general) * 100) if total_general > 0 else 0
                 st.write(f"**💳 {metodo}**")
                 st.progress(porcentaje / 100)
-                
             with col2:
-                st.metric(
-                    label=f"{cantidad} pago{'s' if cantidad > 1 else ''}",
-                    value=f"S/. {float(total):.2f}"
-                )
-            
+                st.metric(label=f"{cantidad} pago{'s' if cantidad > 1 else ''}", value=f"S/. {float(total):.2f}")
             st.divider()
     else:
         st.info("No hay pagos registrados hoy.")
@@ -551,28 +349,20 @@ def mostrar_estadisticas():
 # --------------------------------
 # AUTO-REFRESH
 # --------------------------------
-import time
-
-# Botón de actualización manual en la sidebar
 with st.sidebar:
     st.markdown("### ⚙️ Configuración")
-    
     auto_refresh = st.checkbox("🔄 Auto-actualizar cada 3s", value=False)
-    
     if st.button("🔄 Actualizar ahora", use_container_width=True):
         st.rerun()
-    
     if auto_refresh:
         time.sleep(3)
         st.rerun()
-    
     st.divider()
     st.caption(f"Última actualización: {hora_peru().strftime('%H:%M:%S')}")
 
 # --------------------------------
 # INTERFAZ
 # --------------------------------
-
 st.title("Sistema Comercial - NSJ CAPROYECT")
 st.divider()
 
@@ -586,11 +376,10 @@ tab_venta, tab_ventas, tab_estadisticas, tab_reporte = st.tabs(
 # NUEVA VENTA
 # ======================================
 with tab_venta:
-
-    # ✅ MOSTRAR MENSAJE SI EXISTE
     if "mensaje_exito" in st.session_state:
         st.success(st.session_state.mensaje_exito)
         del st.session_state.mensaje_exito
+    
     cliente = st.text_input("Cliente")
     producto = st.text_input("Producto")
     total = st.number_input("Total", min_value=0.0)
@@ -611,130 +400,54 @@ with tab_venta:
 
     if st.button("Registrar venta"):
         registrar_venta({
-            "Cliente": cliente,
-            "Producto": producto,
-            "Total": total,
-            "Pagado": pagado,
-            "Saldo": saldo,
-            "Estado": estado,
-            "Método de pago": metodo_pago,
-            "Entrega": entrega
+            "Cliente": cliente, "Producto": producto, "Total": total,
+            "Pagado": pagado, "Saldo": saldo, "Estado": estado,
+            "Método de pago": metodo_pago, "Entrega": entrega
         })
 
 # ======================================
 # VENTAS
 # ======================================
 with tab_ventas:
-    
-    # ✅ MOSTRAR MENSAJE SI EXISTE
     if "mensaje_exito" in st.session_state:
         st.success(st.session_state.mensaje_exito)
         del st.session_state.mensaje_exito
-     # 🔍 DEBUG: Ver exactamente qué hay en la BD
-    with st.expander("🔍 DEBUG - Ver datos de la base de datos"):
-        conn = conectar()
-        cur = conn.cursor()
-        
-        # 1. Ver TODAS las ventas de hoy
-        cur.execute("""
-            SELECT 
-                id,
-                fecha AT TIME ZONE 'America/Lima' as fecha_lima,
-                cliente,
-                total,
-                cerrado,
-                entrega,
-                saldo
-            FROM ventas
-            WHERE DATE(fecha AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') = 
-                  DATE(NOW() AT TIME ZONE 'America/Lima')
-            ORDER BY fecha DESC
-        """)
-        ventas_hoy = cur.fetchall()
-        
-        st.write(f"**📊 Total de ventas registradas HOY: {len(ventas_hoy)}**")
-        st.write("---")
-        
-        total_sum = 0
-        cerradas_count = 0
-        no_cerradas_count = 0
-        
-        for v in ventas_hoy:
-            total_sum += float(v[3])
-            if v[4]:  # cerrado
-                cerradas_count += 1
-                estado = "🔒 CERRADA"
-            else:
-                no_cerradas_count += 1
-                estado = "📂 ABIERTA"
-            
-            st.write(f"**Venta #{v[0]}** | {v[1].strftime('%H:%M')} | {v[2]} | S/. {v[3]} | {estado} | Entrega: {v[5]} | Saldo: S/. {v[6]}")
-        
-        st.write("---")
-        st.write(f"**Ventas cerradas:** {cerradas_count}")
-        st.write(f"**Ventas abiertas:** {no_cerradas_count}")
-        st.write(f"**SUMA TOTAL DE VENTAS HOY: S/. {total_sum:.2f}**")
-        
-        # 2. Ver fecha/hora actual del servidor
-        cur.execute("SELECT NOW() AT TIME ZONE 'America/Lima'")
-        fecha_servidor = cur.fetchone()[0]
-        st.write(f"**🕐 Fecha/Hora del servidor (Lima): {fecha_servidor}**")
-        
-        conn.close()
-    # ✅ USAR FRAGMENTO
     mostrar_ventas()
 
 # ======================================
 # ESTADÍSTICAS
 # ======================================
 with tab_estadisticas:
-    # ✅ USAR FRAGMENTO
     mostrar_estadisticas()
 
 # ======================================
-# CIERRE DE CAJA
+# REPORTE
 # ======================================
 with tab_reporte:
-
     ventas = obtener_ventas()
 
-    # =====================================================
-    # 📄 REPORTE PROFESIONAL PDF (PRIMERO)
-    # =====================================================
     st.subheader("📄 Reporte Profesional")
 
     if not ventas:
         st.warning("No hay ventas para generar reporte")
     else:
-        from io import BytesIO
-        from reportlab.platypus import Image
-        from reportlab.lib.units import inch
-
         if st.button("Generar PDF"):
-
             buffer = BytesIO()
             doc = SimpleDocTemplate(buffer)
             elementos = []
             estilos = getSampleStyleSheet()
 
-            # LOGO
             if os.path.exists("logo.png"):
                 logo = Image("logo.png", width=2*inch, height=1*inch)
                 elementos.append(logo)
 
             elementos.append(Spacer(1, 10))
-
-            # ENCABEZADO
             elementos.append(Paragraph("<b>SISTEMA COMERCIAL</b>", estilos["Title"]))
             elementos.append(Paragraph("<b>NSJ CAPROYECT</b>", estilos["Heading2"]))
             elementos.append(Spacer(1, 5))
-            elementos.append(Paragraph(
-                f"Fecha de emisión: {hora_peru().strftime('%d/%m/%Y %H:%M')}",
-                estilos["Normal"]
-            ))
+            elementos.append(Paragraph(f"Fecha de emisión: {hora_peru().strftime('%d/%m/%Y %H:%M')}", estilos["Normal"]))
             elementos.append(Spacer(1, 20))
 
-            # ✅ TOTALES BASADOS EN LAS VENTAS ACTUALES (no cerradas)
             total_vendido = sum(v["Total"] for v in ventas)
             total_pagado = sum(v["Pagado"] for v in ventas)
             total_pendiente = sum(v["Saldo"] for v in ventas)
@@ -755,24 +468,12 @@ with tab_reporte:
             elementos.append(tabla_resumen)
             elementos.append(Spacer(1, 20))
 
-            # DETALLE
-            data = [[
-                "Fecha", "Cliente", "Producto",
-                "Total", "Pagado", "Saldo",
-                "Estado", "Método", "Entrega"
-            ]]
-
+            data = [["Fecha", "Cliente", "Producto", "Total", "Pagado", "Saldo", "Estado", "Método", "Entrega"]]
             for v in ventas:
                 data.append([
-                    v["Fecha"].strftime('%d/%m/%Y %H:%M'),  # ✅ Formato correcto
-                    v["Cliente"],
-                    v["Producto"],
-                    f"S/. {v['Total']:.2f}",
-                    f"S/. {v['Pagado']:.2f}",
-                    f"S/. {v['Saldo']:.2f}",
-                    v["Estado"],
-                    v["Método de pago"],
-                    v["Entrega"]
+                    v["Fecha"].strftime('%d/%m/%Y %H:%M'), v["Cliente"], v["Producto"],
+                    f"S/. {v['Total']:.2f}", f"S/. {v['Pagado']:.2f}", f"S/. {v['Saldo']:.2f}",
+                    v["Estado"], v["Método de pago"], v["Entrega"]
                 ])
 
             tabla = Table(data, repeatRows=1)
@@ -785,50 +486,32 @@ with tab_reporte:
             ]))
 
             elementos.append(tabla)
-
             doc.build(elementos)
             buffer.seek(0)
 
-            st.download_button(
-                "Descargar Reporte",
-                buffer,
-                "reporte_ventas_profesional.pdf",
-                "application/pdf"
-            )
+            st.download_button("Descargar Reporte", buffer, "reporte_ventas_profesional.pdf", "application/pdf")
 
-    # =====================================================
-    # 🔒 CIERRE DE CAJA (SEGUNDO)
-    # =====================================================
     st.divider()
     st.subheader("🔒 Cierre de Caja")
 
     if st.button("Realizar Cierre de Caja"):
         resultado = cierre_de_caja("Admin")
-
         if resultado:
             st.success("✅ Cierre realizado correctamente")
             st.rerun()
         else:
             st.warning("No hay ventas entregadas y pagadas para cerrar")
 
-    # =====================================================
-    # 📜 HISTORIAL (TERCERO)
-    # =====================================================
     st.divider()
     st.subheader("📜 Historial de Cierres")
 
     cierres = obtener_cierres()
-
     if cierres:
         for c in cierres:
             with st.container(border=True):
                 st.write(f"📅 Fecha: {c[0]}")
                 st.write(f"💰 Total General: S/. {c[1]}")
-                st.write(f"Efectivo: S/. {c[2]}")
-                st.write(f"Yape: S/. {c[3]}")
-                st.write(f"Plin: S/. {c[4]}")
-                st.write(f"Transferencia: S/. {c[5]}")
-                st.write(f"👤 Usuario: {c[6]}")
-                st.write(f"🕒 Registrado: {c[7]}")
+                st.write(f"Efectivo: S/. {c[2]} | Yape: S/. {c[3]} | Plin: S/. {c[4]} | Transferencia: S/. {c[5]}")
+                st.write(f"👤 Usuario: {c[6]} | 🕒 Registrado: {c[7]}")
     else:
         st.info("No hay cierres registrados aún.")
