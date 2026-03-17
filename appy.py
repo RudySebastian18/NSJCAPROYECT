@@ -305,7 +305,85 @@ def mostrar_ventas():
                     eliminar_venta(v["id"])
     
             st.divider()
+@st.fragment
+def mostrar_ventas_anteriores():
+    conn = conectar()
+    cur = conn.cursor()
+    
+    # Ventas NO cerradas de días anteriores
+    cur.execute("""
+        SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
+        FROM ventas
+        WHERE cerrado = FALSE
+        AND DATE(fecha AT TIME ZONE 'America/Lima') < CURRENT_DATE
+        ORDER BY fecha DESC
+    """)
+    rows = cur.fetchall()
+    conn.close()
 
+    ventas = []
+    for r in rows:
+        fecha_peru = r[1].astimezone(ZoneInfo("America/Lima"))
+        ventas.append({
+            "id": r[0], "Fecha": fecha_peru, "Cliente": r[2], "Producto": r[3],
+            "Total": float(r[4]), "Pagado": float(r[5]), "Saldo": float(r[6]),
+            "Estado": r[7], "Método de pago": r[8], "Entrega": r[9]
+        })
+    
+    if not ventas:
+        st.info("✅ No hay ventas pendientes de días anteriores")
+        return
+
+    st.subheader(f"📋 Ventas Pendientes de Días Anteriores ({len(ventas)})")
+    st.warning("⚠️ Estas ventas son de días anteriores y no se incluyen en los totales de hoy")
+    st.divider()
+
+    for v in ventas:
+        with st.container(border=True):
+            st.markdown(f"### 🧾 Pedido #{v['id']}")
+            st.write(f"📅 Fecha: {v['Fecha'].strftime('%d/%m/%Y %H:%M')}")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"👤 Cliente: {v['Cliente']}")
+                st.write(f"📦 Producto: {v['Producto']}")
+                st.write(f"💳 Método de pago inicial: {v['Método de pago']}")
+            with col2:
+                st.write(f"💰 Total: S/. {v['Total']:.2f}")
+                st.write(f"💵 Pagado: S/. {v['Pagado']:.2f}")
+                st.write(f"🧾 Saldo: S/. {v['Saldo']:.2f}")
+    
+            if v["Saldo"] > 0:
+                st.warning(f"⚠️ Adelanto recibido. Falta pagar: S/. {v['Saldo']:.2f}")
+            else:
+                st.success("✅ Pagado completamente")
+    
+            if v["Entrega"] == "Pendiente":
+                st.info("🚚 Entrega pendiente")
+            else:
+                st.success("📦 Pedido entregado")
+    
+            colA, colB, colC = st.columns(3)
+    
+            if v["Saldo"] > 0:
+                with colA:
+                    popover = st.popover("💵 Completar pago")
+                    with popover:
+                        st.write(f"**Saldo pendiente:** S/. {v['Saldo']:.2f}")
+                        metodo_completar = st.selectbox("Método de pago", METODOS_PAGO, key=f"metodo_ant_{v['id']}")
+                        if st.button("✅ Confirmar pago", key=f"confirmar_ant_{v['id']}", type="primary"):
+                            completar_pago(v["id"], v["Saldo"], metodo_completar)
+    
+            with colB:
+                nuevo_estado = "Entregado" if v["Entrega"] == "Pendiente" else "Pendiente"
+                if st.button(f"🚚 Marcar {nuevo_estado}", key=f"ent_ant_{v['id']}"):
+                    marcar_entrega(v["id"], nuevo_estado)
+    
+            with colC:
+                if st.button("🗑 Eliminar", key=f"del_ant_{v['id']}"):
+                    eliminar_venta(v["id"])
+    
+            st.divider()
 @st.fragment
 def mostrar_estadisticas():
     conn = conectar()
@@ -368,8 +446,8 @@ st.divider()
 
 METODOS_PAGO = ["Efectivo", "Yape", "Plin", "Transferencia"]
 
-tab_venta, tab_ventas, tab_estadisticas, tab_reporte = st.tabs(
-    ["➕ Nueva Venta", "📊 Ventas", "📈 Estadísticas", "📄 Reporte"]
+tab_venta, tab_ventas, tab_anteriores, tab_estadisticas, tab_reporte = st.tabs(
+    ["➕ Nueva Venta", "📊 Ventas Hoy", "📋 Ventas Anteriores", "📈 Estadísticas", "📄 Reporte"]
 )
 
 # ======================================
@@ -413,7 +491,14 @@ with tab_ventas:
         st.success(st.session_state.mensaje_exito)
         del st.session_state.mensaje_exito
     mostrar_ventas()
-
+# ======================================
+# VENTAS ANTERIORES
+# ======================================
+with tab_anteriores:
+    if "mensaje_exito" in st.session_state:
+        st.success(st.session_state.mensaje_exito)
+        del st.session_state.mensaje_exito
+    mostrar_ventas_anteriores()
 # ======================================
 # ESTADÍSTICAS
 # ======================================
