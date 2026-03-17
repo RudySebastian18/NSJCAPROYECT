@@ -445,15 +445,53 @@ def mostrar_estadisticas():
 # --------------------------------
 with st.sidebar:
     st.markdown("### ⚙️ Configuración")
+    
     auto_refresh = st.checkbox("🔄 Auto-actualizar cada 5s", value=False)
     if st.button("🔄 Actualizar ahora", use_container_width=True):
         st.rerun()
     if auto_refresh:
         time.sleep(5)
         st.rerun()
+    
     st.divider()
     st.caption(f"Última actualización: {hora_peru().strftime('%H:%M:%S')}")
-
+    
+    # ✅ SECCIÓN DE REINICIO
+    st.divider()
+    st.markdown("### ⚠️ Zona de Peligro")
+    
+    with st.expander("🗑️ Limpiar datos del día"):
+        st.warning("⚠️ **ADVERTENCIA**: Esto eliminará TODOS los datos de hoy (ventas, pagos y estadísticas). Esta acción NO se puede deshacer.")
+        
+        confirmar = st.checkbox("Entiendo que esto borrará todo")
+        
+        if confirmar:
+            if st.button("🔥 BORRAR TODO DEL DÍA", type="primary", use_container_width=True):
+                conn = conectar()
+                try:
+                    cur = conn.cursor()
+                    
+                    # Eliminar pagos de hoy
+                    cur.execute("""
+                        DELETE FROM pagos
+                        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+                    """)
+                    pagos_eliminados = cur.rowcount
+                    
+                    # Eliminar ventas de hoy
+                    cur.execute("""
+                        DELETE FROM ventas
+                        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+                    """)
+                    ventas_eliminadas = cur.rowcount
+                    
+                    conn.commit()
+                    st.success(f"✅ Eliminadas {ventas_eliminadas} ventas y {pagos_eliminados} pagos del día")
+                    st.cache_data.clear()  # Limpiar cache
+                    time.sleep(1)
+                finally:
+                    liberar_conexion(conn)
+                st.rerun()
 # --------------------------------
 # INTERFAZ
 # --------------------------------
