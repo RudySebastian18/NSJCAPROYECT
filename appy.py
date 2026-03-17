@@ -540,17 +540,21 @@ with tab_reporte:
             elementos = []
             estilos = getSampleStyleSheet()
 
+            # LOGO
             if os.path.exists("logo.png"):
                 logo = Image("logo.png", width=2*inch, height=1*inch)
                 elementos.append(logo)
 
             elementos.append(Spacer(1, 10))
+            
+            # ENCABEZADO
             elementos.append(Paragraph("<b>SISTEMA COMERCIAL</b>", estilos["Title"]))
             elementos.append(Paragraph("<b>NSJ CAPROYECT</b>", estilos["Heading2"]))
             elementos.append(Spacer(1, 5))
             elementos.append(Paragraph(f"Fecha de emisión: {hora_peru().strftime('%d/%m/%Y %H:%M')}", estilos["Normal"]))
             elementos.append(Spacer(1, 20))
 
+            # TOTALES GENERALES
             total_vendido = sum(v["Total"] for v in ventas)
             total_pagado = sum(v["Pagado"] for v in ventas)
             total_pendiente = sum(v["Saldo"] for v in ventas)
@@ -566,33 +570,141 @@ with tab_reporte:
                 ('BACKGROUND', (0, 0), (-1, -1), colors.lightgrey),
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
                 ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+                ('FONTSIZE', (0, 0), (-1, -1), 11),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
             ]))
 
             elementos.append(tabla_resumen)
-            elementos.append(Spacer(1, 20))
+            elementos.append(Spacer(1, 25))
+
+            # ✅ ESTADÍSTICAS POR MÉTODO DE PAGO
+            conn = conectar()
+            try:
+                cur = conn.cursor()
+                
+                # Obtener estadísticas de pagos
+                cur.execute("""
+                    SELECT metodo, COUNT(*), COALESCE(SUM(monto),0)
+                    FROM pagos
+                    WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+                    GROUP BY metodo
+                    ORDER BY SUM(monto) DESC
+                """)
+                estadisticas = cur.fetchall()
+                
+                # Total cobrado hoy
+                cur.execute("""
+                    SELECT COALESCE(SUM(monto),0)
+                    FROM pagos
+                    WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+                """)
+                total_cobrado_hoy = float(cur.fetchone()[0])
+            finally:
+                liberar_conexion(conn)
+
+            if estadisticas:
+                elementos.append(Paragraph("<b>ESTADÍSTICAS DE PAGOS DEL DÍA</b>", estilos["Heading3"]))
+                elementos.append(Spacer(1, 10))
+                
+                # Tabla de estadísticas
+                estadisticas_data = [["Método de Pago", "Cantidad", "Total Recibido", "Porcentaje"]]
+                
+                for metodo, cantidad, total in estadisticas:
+                    porcentaje = (float(total) / total_cobrado_hoy * 100) if total_cobrado_hoy > 0 else 0
+                    estadisticas_data.append([
+                        metodo,
+                        str(cantidad),
+                        f"S/. {float(total):.2f}",
+                        f"{porcentaje:.1f}%"
+                    ])
+                
+                # Fila de totales
+                total_pagos = sum(e[1] for e in estadisticas)
+                estadisticas_data.append([
+                    "TOTAL",
+                    str(total_pagos),
+                    f"S/. {total_cobrado_hoy:.2f}",
+                    "100.0%"
+                ])
+                
+                tabla_estadisticas = Table(estadisticas_data, colWidths=[150, 80, 120, 80])
+                tabla_estadisticas.setStyle(TableStyle([
+                    # Encabezado
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f4788')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 10),
+                    ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                    
+                    # Contenido
+                    ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
+                    ('FONTSIZE', (0, 1), (-1, -2), 9),
+                    ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
+                    ('ALIGN', (2, 1), (2, -1), 'RIGHT'),
+                    
+                    # Fila de totales
+                    ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+                    ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, -1), (-1, -1), 10),
+                    
+                    # Bordes
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                    ('BOX', (0, 0), (-1, -1), 1, colors.black),
+                ]))
+                
+                elementos.append(tabla_estadisticas)
+                elementos.append(Spacer(1, 25))
+
+            # DETALLE DE VENTAS
+            elementos.append(Paragraph("<b>DETALLE DE VENTAS PENDIENTES</b>", estilos["Heading3"]))
+            elementos.append(Spacer(1, 10))
 
             data = [["Fecha", "Cliente", "Producto", "Total", "Pagado", "Saldo", "Estado", "Método", "Entrega"]]
             for v in ventas:
                 data.append([
-                    v["Fecha"].strftime('%d/%m/%Y %H:%M'), v["Cliente"], v["Producto"],
-                    f"S/. {v['Total']:.2f}", f"S/. {v['Pagado']:.2f}", f"S/. {v['Saldo']:.2f}",
-                    v["Estado"], v["Método de pago"], v["Entrega"]
+                    v["Fecha"].strftime('%d/%m/%Y %H:%M'), 
+                    v["Cliente"], 
+                    v["Producto"],
+                    f"S/. {v['Total']:.2f}", 
+                    f"S/. {v['Pagado']:.2f}", 
+                    f"S/. {v['Saldo']:.2f}",
+                    v["Estado"], 
+                    v["Método de pago"], 
+                    v["Entrega"]
                 ])
 
             tabla = Table(data, repeatRows=1)
             tabla.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 8),
+                ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-                ('FONTSIZE', (0, 0), (-1, -1), 7),
+                ('FONTSIZE', (0, 1), (-1, -1), 7),
                 ('ALIGN', (3, 1), (5, -1), 'RIGHT'),
             ]))
 
             elementos.append(tabla)
+            
+            # PIE DE PÁGINA
+            elementos.append(Spacer(1, 20))
+            elementos.append(Paragraph(
+                f"<i>Reporte generado automáticamente por Sistema Comercial NSJ CAPROYECT</i>",
+                estilos["Normal"]
+            ))
+
             doc.build(elementos)
             buffer.seek(0)
 
-            st.download_button("Descargar Reporte", buffer, "reporte_ventas_profesional.pdf", "application/pdf")
+            st.download_button(
+                "📥 Descargar Reporte Completo", 
+                buffer, 
+                f"reporte_ventas_{hora_peru().strftime('%Y%m%d_%H%M%S')}.pdf", 
+                "application/pdf",
+                use_container_width=True
+            )
 
     st.divider()
     st.subheader("🔒 Cierre de Caja")
