@@ -221,15 +221,15 @@ def mostrar_ventas():
     try:
         cur = conn.cursor()
         
-        # Consulta optimizada: todo en una
+        # Consulta optimizada con fecha correcta
         cur.execute("""
             SELECT 
                 (SELECT COALESCE(SUM(total),0) FROM ventas 
-                 WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE) as total_vendido,
+                 WHERE DATE(fecha AT TIME ZONE 'America/Lima') = DATE(NOW() AT TIME ZONE 'America/Lima')) as total_vendido,
                 (SELECT COALESCE(SUM(monto),0) FROM pagos 
-                 WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE) as total_cobrado,
+                 WHERE DATE(fecha AT TIME ZONE 'America/Lima') = DATE(NOW() AT TIME ZONE 'America/Lima')) as total_cobrado,
                 (SELECT COALESCE(SUM(saldo),0) FROM ventas 
-                 WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE) as total_pendiente
+                 WHERE DATE(fecha AT TIME ZONE 'America/Lima') = DATE(NOW() AT TIME ZONE 'America/Lima')) as total_pendiente
         """)
         
         totales = cur.fetchone()
@@ -242,7 +242,7 @@ def mostrar_ventas():
             SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
             FROM ventas
             WHERE cerrado = FALSE
-            AND DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+            AND DATE(fecha AT TIME ZONE 'America/Lima') = DATE(NOW() AT TIME ZONE 'America/Lima')
             ORDER BY fecha DESC
         """)
         rows = cur.fetchall()
@@ -327,13 +327,13 @@ def mostrar_ventas_anteriores():
             SELECT id, fecha, cliente, producto, total, pagado, saldo, estado, metodo_pago, entrega
             FROM ventas
             WHERE cerrado = FALSE
-            AND DATE(fecha AT TIME ZONE 'America/Lima') < CURRENT_DATE
+            AND DATE(fecha AT TIME ZONE 'America/Lima') < DATE(NOW() AT TIME ZONE 'America/Lima')
             ORDER BY fecha DESC
         """)
         rows = cur.fetchall()
     finally:
         liberar_conexion(conn)
-
+        
     ventas = []
     for r in rows:
         fecha_peru = r[1].astimezone(ZoneInfo("America/Lima"))
@@ -407,7 +407,7 @@ def mostrar_estadisticas():
         cur.execute("""
             SELECT metodo, COUNT(*), COALESCE(SUM(monto),0)
             FROM pagos
-            WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+            WHERE DATE(fecha AT TIME ZONE 'America/Lima') = DATE(NOW() AT TIME ZONE 'America/Lima')
             GROUP BY metodo
             ORDER BY SUM(monto) DESC
         """)
@@ -416,7 +416,7 @@ def mostrar_estadisticas():
         cur.execute("""
             SELECT COALESCE(SUM(monto),0)
             FROM pagos
-            WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+            WHERE DATE(fecha AT TIME ZONE 'America/Lima') = DATE(NOW() AT TIME ZONE 'America/Lima')
         """)
         total_general = cur.fetchone()[0]
     finally:
@@ -474,14 +474,14 @@ with st.sidebar:
                     # Eliminar pagos de hoy
                     cur.execute("""
                         DELETE FROM pagos
-                        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+                        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = DATE(NOW() AT TIME ZONE 'America/Lima')
                     """)
                     pagos_eliminados = cur.rowcount
                     
                     # Eliminar ventas de hoy
                     cur.execute("""
                         DELETE FROM ventas
-                        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+                        WHERE DATE(fecha AT TIME ZONE 'America/Lima') = DATE(NOW() AT TIME ZONE 'America/Lima')
                     """)
                     ventas_eliminadas = cur.rowcount
                     
@@ -624,7 +624,7 @@ with tab_reporte:
                 cur.execute("""
                     SELECT metodo, COUNT(*), COALESCE(SUM(monto),0)
                     FROM pagos
-                    WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+                    WHERE DATE(fecha AT TIME ZONE 'America/Lima') = DATE(NOW() AT TIME ZONE 'America/Lima')
                     GROUP BY metodo
                     ORDER BY SUM(monto) DESC
                 """)
@@ -634,9 +634,10 @@ with tab_reporte:
                 cur.execute("""
                     SELECT COALESCE(SUM(monto),0)
                     FROM pagos
-                    WHERE DATE(fecha AT TIME ZONE 'America/Lima') = CURRENT_DATE
+                    WHERE DATE(fecha AT TIME ZONE 'America/Lima') = DATE(NOW() AT TIME ZONE 'America/Lima')
                 """)
                 total_cobrado_hoy = float(cur.fetchone()[0])
+                
             finally:
                 liberar_conexion(conn)
 
